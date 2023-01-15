@@ -1,0 +1,7 @@
+package api
+
+func GetAllContracts() {
+
+}
+
+
