@@ -25,7 +25,10 @@ var (
 	server *gin.Engine
 
 	contractController controllers.ContractController
-	contractService    services.ContractService
+	authController     controllers.AuthController
+
+	userService     services.UserService
+	contractService services.ContractService
 
 	ctx     context.Context
 	cluster *gocb.Cluster
@@ -44,11 +47,15 @@ func init() {
 
 	//initalising database connection
 	logger.Println("couchbase connection pending")
-	connectionString := "localhost"
-	bucketName := "testbucket"
+	connectionString := os.Getenv("COUCHBASE_CONNECTION_URI")
+	bucketName := os.Getenv("COUCHBASE_DEFAULT_BUCKET")
 
-	username := "Administrator"
-	password := "password"
+	username := os.Getenv("COUCHBASE_USERNAME")
+	password := os.Getenv("COUCHBASE_PASSWORD")
+
+	if connectionString == "" || bucketName == "" || username == "" || password == "" {
+		logger.Fatal("error: missing environment configuration")
+	}
 
 	// For a secure cluster connection, use `couchbases://<your-cluster-ip>` instead.
 	cluster, err = gocb.Connect("couchbase://"+connectionString, gocb.ClusterOptions{
@@ -75,7 +82,10 @@ func init() {
 
 	// controller and service
 	contractService = services.New(bucket, ctx)
-	contractController = controllers.New(contractService)
+	userService = services.NewUserService(bucket, ctx)
+
+	authController = controllers.NewAuthController(userService)
+	contractController = controllers.NewContractController(contractService)
 
 	server = gin.Default()
 }
@@ -85,6 +95,7 @@ func main() {
 	defer cluster.Close(nil)
 
 	basepath := server.Group("/v1")
-	contractController.RegisterRoutes(basepath)
-	server.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+	authController.AuthRoutes(basepath)
+	contractController.ContractRoutes(basepath)
+	server.Run()
 }

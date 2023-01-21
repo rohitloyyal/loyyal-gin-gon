@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/services"
 )
@@ -13,7 +14,7 @@ type ContractController struct {
 }
 
 // constructor calling
-func New(service services.ContractService) ContractController {
+func NewContractController(service services.ContractService) ContractController {
 	return ContractController{
 		ContractService: service,
 	}
@@ -73,8 +74,10 @@ func (controller *ContractController) ContractGet(ctx *gin.Context) {
 	})
 }
 
-func (controller *ContractController) RegisterRoutes(group *gin.RouterGroup) {
+func (controller *ContractController) ContractRoutes(group *gin.RouterGroup) {
 	contractRoute := group.Group("/contract")
+	contractRoute.Use(middleware.JWTAuthMiddleware())
+
 	contractRoute.GET("/get", controller.ContractGet)
 	contractRoute.POST("/filter", controller.ContractCreate)
 	contractRoute.POST("/create", controller.ContractCreate)

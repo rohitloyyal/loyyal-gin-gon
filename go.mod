@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/couchbase/gocb/v2 v2.6.0 // indirect
 	github.com/couchbase/gocbcore/v10 v10.2.0 // indirect
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
