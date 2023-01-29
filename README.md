@@ -11,3 +11,4 @@ create transaction and use it for [issue, redeem and transfer]
 jaeger (sp.AddAtrributes)
 nats
 cashier
+add swagger documentation
