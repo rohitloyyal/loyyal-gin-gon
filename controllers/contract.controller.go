@@ -7,6 +7,7 @@ import (
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/services"
+	"github.com/loyyal/loyyal-be-contract/utils/notification"
 )
 
 type ContractController struct {
@@ -30,14 +31,14 @@ func (controller *ContractController) ContractCreate(ctx *gin.Context) {
 		return
 	}
 
-	if contract.ContractId == "" {
+	if contract.ContractId <= 0 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": "contract id is required",
 		})
 		return
 	}
 
-	err := controller.ContractService.Create(&contract)
+	err := controller.ContractService.CreateContract(&contract, "creator", "loyyalchannel")
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": err.Error(),
@@ -52,15 +53,15 @@ func (controller *ContractController) ContractCreate(ctx *gin.Context) {
 
 func (controller *ContractController) ContractGet(ctx *gin.Context) {
 	// get data from body
-	contractId := ctx.Param("contractId")
-	// if contractId == "" {
-	// 	ctx.JSON(http.StatusBadRequest, gin.H{
-	// 		"message": "contract id is required",
-	// 	})
-	// 	return
-	// }
+	contractId := ctx.Query("contractId")
+	if contractId == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "contract id is required",
+		})
+		return
+	}
 
-	contract, err := controller.ContractService.Get(contractId)
+	contract, err := controller.ContractService.GetContract(contractId)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": err.Error(),
@@ -74,13 +75,44 @@ func (controller *ContractController) ContractGet(ctx *gin.Context) {
 	})
 }
 
+func (controller *ContractController) ContractDelete(ctx *gin.Context) {
+	// get data from body
+	contractId := ctx.Param("contractId")
+	if contractId == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "contract id is required",
+		})
+		return
+	}
+
+	contract, err := controller.ContractService.GetContract(contractId)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data":    contract,
+	})
+}
+
+func (controller *ContractController) SendEmail(ctx *gin.Context) {
+	go notification.SendEmailNotification()
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "success",
+	})
+}
+
 func (controller *ContractController) ContractRoutes(group *gin.RouterGroup) {
 	contractRoute := group.Group("/contract")
 	contractRoute.Use(middleware.JWTAuthMiddleware())
 
 	contractRoute.GET("/get", controller.ContractGet)
-	contractRoute.POST("/filter", controller.ContractCreate)
 	contractRoute.POST("/create", controller.ContractCreate)
-	contractRoute.PUT("/update", controller.ContractCreate)
-	contractRoute.DELETE("/delete", controller.ContractCreate)
+	contractRoute.DELETE("/delete", controller.ContractDelete)
+	contractRoute.GET("/send-email", controller.SendEmail)
 }

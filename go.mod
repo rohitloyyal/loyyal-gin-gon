@@ -2,10 +2,11 @@ module github.com/loyyal/loyyal-be-contract
 
 go 1.19
 
+require github.com/dgrijalva/jwt-go v3.2.0+incompatible
+
 require (
 	github.com/couchbase/gocb/v2 v2.6.0 // indirect
 	github.com/couchbase/gocbcore/v10 v10.2.0 // indirect
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
@@ -26,7 +27,6 @@ require (
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/radovskyb/watcher v1.0.7 // indirect
 	github.com/ugorji/go/codec v1.2.8 // indirect
@@ -35,6 +35,8 @@ require (
 	golang.org/x/sys v0.4.0 // indirect
 	golang.org/x/text v0.6.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
+	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
+	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gorm.io/gorm v1.24.3 // indirect
 )

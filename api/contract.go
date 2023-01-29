@@ -1,7 +1,0 @@
-package api
-
-func GetAllContracts() {
-
-}
-
-

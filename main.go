@@ -24,11 +24,17 @@ var (
 	logger *log.Logger
 	server *gin.Engine
 
-	contractController controllers.ContractController
-	authController     controllers.AuthController
+	contractController    controllers.ContractController
+	authController        controllers.AuthController
+	identityController    controllers.IdentityController
+	walletController      controllers.WalletController
+	transactionController controllers.TransactionController
 
-	userService     services.UserService
-	contractService services.ContractService
+	userService        services.UserService
+	identityService    services.IdentityService
+	walletService      services.WalletService
+	transactionService services.TransactionService
+	contractService    services.ContractService
 
 	ctx     context.Context
 	cluster *gocb.Cluster
@@ -81,10 +87,17 @@ func init() {
 	// nats connection
 
 	// controller and service
-	contractService = services.New(bucket, ctx)
+
 	userService = services.NewUserService(bucket, ctx)
+	identityService = services.NewIdentity(bucket, ctx)
+	walletService = services.NewWallet(bucket, ctx)
+	transactionService = services.NewTransaction(bucket, ctx)
+	contractService = services.NewContract(bucket, ctx)
 
 	authController = controllers.NewAuthController(userService)
+	identityController = controllers.NewIdentityController(identityService)
+	walletController = controllers.NewWallet(walletService)
+	transactionController = controllers.NewTransactionController(transactionService)
 	contractController = controllers.NewContractController(contractService)
 
 	server = gin.Default()
@@ -96,6 +109,9 @@ func main() {
 
 	basepath := server.Group("/v1")
 	authController.AuthRoutes(basepath)
+	identityController.IdentityRoutes(basepath)
+	walletController.WalletRoutes(basepath)
+	transactionController.TransactionRoutes(basepath)
 	contractController.ContractRoutes(basepath)
 	server.Run()
 }
