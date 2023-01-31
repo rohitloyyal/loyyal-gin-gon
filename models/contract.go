@@ -3,7 +3,7 @@ package models
 import "time"
 
 type Contract struct {
-	DocType  string `json:"docType"`
+	DocType  string `json:"type"`
 	Identifier   string `json:"identifier"`
 	ContractId   int64  `json:"contractId"`
 	ContractName string `json:"contractName"`

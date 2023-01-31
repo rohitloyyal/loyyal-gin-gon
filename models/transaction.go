@@ -6,7 +6,7 @@ import (
 )
 
 type Transaction struct {
-	DocType string `json:"docType"`
+	DocType string `json:"type"`
 	TransactionWritables
 	TransactionReadOnlys
 

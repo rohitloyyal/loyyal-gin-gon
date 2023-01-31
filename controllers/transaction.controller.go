@@ -6,17 +6,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
+	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
 )
 
 type TransactionController struct {
 	TransactionService services.TransactionService
+	Nats               *nats.Client
 }
 
 // constructor calling
-func NewTransactionController(service services.TransactionService) TransactionController {
+func NewTransactionController(service services.TransactionService, nats *nats.Client) TransactionController {
 	return TransactionController{
 		TransactionService: service,
+		Nats:               nats,
 	}
 }
 

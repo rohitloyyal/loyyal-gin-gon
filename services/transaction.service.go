@@ -25,7 +25,7 @@ func NewTransaction(bucket *gocb.Bucket, ctx context.Context) TransactionService
 func (service *TransactionService) Create(transaction *models.Transaction) error {
 	transaction.DocType = "tx"
 	transaction.Channel = "loyyalchannel"
-	transaction.Creator = "consumer"
+	transaction.Creator = "admin"
 	transaction.TransactionExtID.Ref = common.GenerateIdentifier(62)
 	transaction.Ref = common.GenerateIdentifier(30)
 

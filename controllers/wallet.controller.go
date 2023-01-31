@@ -1,23 +1,26 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
+	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
-	"github.com/loyyal/loyyal-be-contract/utils/notification"
 )
 
 type WalletController struct {
 	WalletService services.WalletService
+	Nats          *nats.Client
 }
 
 // constructor calling
-func NewWallet(service services.WalletService) WalletController {
+func NewWallet(service services.WalletService, nats *nats.Client) WalletController {
 	return WalletController{
 		WalletService: service,
+		Nats:          nats,
 	}
 }
 
@@ -44,6 +47,11 @@ func (controller *WalletController) walletCreate(ctx *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+
+	// publishing to nats
+	if err := controller.Nats.Publish(ctx.Request.Context(), &models.CreateRequest{RefID: wallet.Ref, Amount: wallet.Balance, Channel: wallet.Channel}); err != nil {
+		fmt.Print("failed to write wallet to NATS (failing over to retry service): %w", err)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -99,21 +107,6 @@ func (controller *WalletController) walletDelete(ctx *gin.Context) {
 		})
 		return
 	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-	})
-}
-
-func (controller *WalletController) SendEmail(ctx *gin.Context) {
-	// get data from body
-	go notification.SendEmailNotification()
-	// if err != nil {
-	// 	ctx.JSON(http.StatusBadRequest, gin.H{
-	// 		"message": err.Error(),
-	// 	})
-	// 	return
-	// }
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "success",

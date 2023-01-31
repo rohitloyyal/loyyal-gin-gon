@@ -11,7 +11,7 @@ type Asset struct {
 }
 
 type Wallet struct {
-	DocType    string `json:"docType"`
+	DocType    string `json:"type"`
 	Identifier string `json:"identifier"`
 	Name       string `json:"name"`
 	// Metadata stores the user provided data, for example, a description.

@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
 	"github.com/loyyal/loyyal-be-contract/models"
+	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
 )
 
@@ -31,18 +33,34 @@ func (service *WalletService) Create(wallet *models.Wallet, linkedTo string, pre
 	wallet.Balance = preLoadAmount
 
 	wallet.WalletType = "regular"
-	wallet.Creator = "consumer"
+	wallet.Creator = "admin"
 	wallet.Status = "active"
 
 	wallet.CreatedAt = time.Now()
 	wallet.LastUpdatedAt = time.Now()
 	wallet.LastUpdatedBy = wallet.Creator
 
+	// adding this reference that will be send to blockchain
+	// and used in callback to update the same document in database
+	ref, err := common.NewRefID()
+	if err != nil {
+		return err
+	}
+	wallet.Ref = ref
+
 	col := service.bucket.DefaultCollection()
-	_, err := col.Insert(wallet_prefix+"/"+wallet.Identifier, wallet, nil)
+	_, err = col.Insert(wallet_prefix+"/"+wallet.Identifier, wallet, nil)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return nil
+}
 
+func publishWalletCreate(ctx context.Context, nats *nats.Client, wallet *models.Wallet) {
+	if err := nats.Publish(ctx, &models.CreateRequest{RefID: wallet.Ref, Amount: wallet.Balance, Channel: wallet.Channel}); err != nil {
+		fmt.Print("failed to write wallet to NATS (failing over to retry service): %w", err)
+	}
 }
 
 func (service *WalletService) Get(walletId string) (any, error) {
@@ -77,7 +95,7 @@ func (service *WalletService) Delete(walletId string, sessionedUser string) erro
 	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
 	if doc == nil {
 		if err != nil {
-			return errors.New("error: no wallet found")	
+			return errors.New("error: no wallet found")
 		}
 	}
 

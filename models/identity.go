@@ -66,7 +66,7 @@ type WalletRef struct {
 }
 
 type Identity struct {
-	DocType             string          `json:"docType"`
+	DocType             string          `json:"type"`
 	Identifier          string          `json:"identifier"`
 	Username            string          `json:"username"`
 	Password            string          `json:"password"`

@@ -26,7 +26,7 @@ export SMTP_EMAIL_REPLY_TO=support@loyyal.net
 export SMTP_EMAIL_HOST=smtp.sendgrid.net
 export SMTP_EMAIL_PROTOCOL=587
 export SMTP_EMAIL_USERNAME=apikey
-export SMTP_EMAIL_PASSWORD=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
+export SMTP_EMAIL_PASSWORD=
 
 
-go run main.go
+go run .

@@ -7,7 +7,6 @@ import (
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/services"
-	"github.com/loyyal/loyyal-be-contract/utils/notification"
 )
 
 type IdentityController struct {
@@ -143,21 +142,6 @@ func (controller *IdentityController) identityDelete(ctx *gin.Context) {
 	})
 }
 
-func (controller *IdentityController) SendEmail(ctx *gin.Context) {
-	// get data from body
-	go notification.SendEmailNotification()
-	// if err != nil {
-	// 	ctx.JSON(http.StatusBadRequest, gin.H{
-	// 		"message": err.Error(),
-	// 	})
-	// 	return
-	// }
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-	})
-}
-
 func (controller *IdentityController) IdentityRoutes(group *gin.RouterGroup) {
 	identityRoute := group.Group("/identity")
 	identityRoute.Use(middleware.JWTAuthMiddleware())
@@ -168,5 +152,4 @@ func (controller *IdentityController) IdentityRoutes(group *gin.RouterGroup) {
 	identityRoute.PUT("/update", controller.IdentityUpdate)
 	identityRoute.DELETE("/delete", controller.identityDelete)
 
-	identityRoute.GET("/send-email", controller.SendEmail)
 }

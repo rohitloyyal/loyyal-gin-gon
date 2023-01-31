@@ -9,11 +9,9 @@ import (
 
 	"github.com/couchbase/gocb/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
-
-	// "github.com/loyyal/golo/nats"
 
 	"github.com/loyyal/loyyal-be-contract/controllers"
+	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
 )
 
@@ -21,8 +19,9 @@ var (
 	version = "dev"
 	service = "api"
 
-	logger *log.Logger
-	server *gin.Engine
+	logger       *log.Logger
+	server       *gin.Engine
+	queueService *nats.Client
 
 	contractController    controllers.ContractController
 	authController        controllers.AuthController
@@ -46,10 +45,10 @@ func init() {
 	ctx = context.TODO()
 	logger = log.New(os.Stderr, fmt.Sprintf("api[%s]: ", version), log.Llongfile|log.Lmicroseconds|log.LstdFlags)
 	//loading environments from file
-	err := godotenv.Load()
-	if err != nil {
-		logger.Fatal("error: while loading .env file")
-	}
+	// err := godotenv.Load()
+	// if err != nil {
+	// 	logger.Fatal("error: while loading .env file")
+	// }
 
 	//initalising database connection
 	logger.Println("couchbase connection pending")
@@ -79,15 +78,22 @@ func init() {
 
 	err = bucket.WaitUntilReady(5*time.Second, nil)
 	if err != nil {
-		logger.Fatal(err.Error())
+		logger.Fatalf("error initializing couchbase connection: %v", err)
 	}
 
 	logger.Println("couchbase connection established")
 
 	// nats connection
+	logger.Println("nats connection pending")
+
+	natsUrl := os.Getenv("NATS_CONNECTION_URL")
+	queueService, err := nats.NewClient(natsUrl)
+	if err != nil {
+		logger.Fatalf("error initializing NATS connection: %v", err)
+	}
+	logger.Println("nats connection established")
 
 	// controller and service
-
 	userService = services.NewUserService(bucket, ctx)
 	identityService = services.NewIdentity(bucket, ctx)
 	walletService = services.NewWallet(bucket, ctx)
@@ -96,8 +102,8 @@ func init() {
 
 	authController = controllers.NewAuthController(userService)
 	identityController = controllers.NewIdentityController(identityService)
-	walletController = controllers.NewWallet(walletService)
-	transactionController = controllers.NewTransactionController(transactionService)
+	walletController = controllers.NewWallet(walletService, queueService)
+	transactionController = controllers.NewTransactionController(transactionService, queueService)
 	contractController = controllers.NewContractController(contractService)
 
 	server = gin.Default()

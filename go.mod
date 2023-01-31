@@ -5,6 +5,12 @@ go 1.19
 require github.com/dgrijalva/jwt-go v3.2.0+incompatible
 
 require (
+	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
+	github.com/nats-io/nkeys v0.3.0 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
+)
+
+require (
 	github.com/couchbase/gocb/v2 v2.6.0 // indirect
 	github.com/couchbase/gocbcore/v10 v10.2.0 // indirect
 	github.com/fatih/color v1.9.0 // indirect
@@ -27,9 +33,11 @@ require (
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/nats-io/nats.go v1.23.0
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/radovskyb/watcher v1.0.7 // indirect
 	github.com/ugorji/go/codec v1.2.8 // indirect
+	go.opencensus.io v0.24.0
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/sys v0.4.0 // indirect

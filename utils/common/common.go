@@ -1,6 +1,9 @@
 package common
 
-import "crypto/rand"
+import (
+	"crypto/rand"
+	"fmt"
+)
 
 func GenerateIdentifier(length int) string {
 	var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
@@ -12,4 +15,12 @@ func GenerateIdentifier(length int) string {
 		b[i] = chars[int(b[i])%ll]
 	}
 	return string(b)
+}
+
+func NewRefID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b), nil
 }

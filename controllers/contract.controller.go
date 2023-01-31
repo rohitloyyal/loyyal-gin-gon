@@ -100,7 +100,7 @@ func (controller *ContractController) ContractDelete(ctx *gin.Context) {
 }
 
 func (controller *ContractController) SendEmail(ctx *gin.Context) {
-	go notification.SendEmailNotification()
+	go notification.SendEmailNotification("rohit@loyyal.com", "Testing Sendgrid Email")
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "success",
