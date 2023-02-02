@@ -1,12 +1,14 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/services"
+	"github.com/loyyal/loyyal-be-contract/utils/common"
 )
 
 type IdentityController struct {
@@ -21,69 +23,53 @@ func NewIdentityController(service services.IdentityService) IdentityController 
 }
 
 func (controller *IdentityController) identityCreate(ctx *gin.Context) {
-	// get data from body
+	fName := "identitycontroller/create"
 	var identity models.Identity
 	if err := ctx.ShouldBindJSON(&identity); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
 	if identity.Username == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "username is required",
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: username is required", fmt.Sprintf("got :%s ", identity.Username))
 		return
 	}
 
 	if identity.Password == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "password is required",
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: password is required", fmt.Sprintf("got :%s ", identity.Password))
 		return
 	}
 
 	identifier, err := controller.IdentityService.Create(&identity)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"body":    identifier,
-	})
+	common.PrepareCustomResponse(ctx, "identity created successfully", struct {
+		Identifier string `json:"identifier"`
+	}{Identifier: identifier})
 }
 
 func (controller *IdentityController) IdentityGet(ctx *gin.Context) {
-	// get data from body
+	fName := "identitycontroller/get"
 	identityId := ctx.Query("identityId")
 	if identityId == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "identity id is required",
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: identifier is required", fmt.Sprintf("got :%s ", identityId))
 		return
 	}
 
 	identity, err := controller.IdentityService.Get(identityId)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"body":    identity,
-	})
+	common.PrepareCustomResponse(ctx, "identity fetched", identity)
 }
 
 func (controller *IdentityController) IdentityUpdate(ctx *gin.Context) {
-	// get data from body
+	fName := "identitycontroller/update"
 	var identity models.Identity
 	if err := ctx.ShouldBindJSON(&identity); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -93,17 +79,13 @@ func (controller *IdentityController) IdentityUpdate(ctx *gin.Context) {
 	}
 
 	if identity.Identifier == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "identifier is required",
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: identifier is required", fmt.Sprintf("got :%s ", identity.Identifier))
 		return
 	}
 
 	err := controller.IdentityService.Update(identity.Identifier, identity.PersonalDetails)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
@@ -111,9 +93,11 @@ func (controller *IdentityController) IdentityUpdate(ctx *gin.Context) {
 		"message": "success",
 		"body":    identity,
 	})
+	common.PrepareCustomResponse(ctx, "identity updated", nil)
 }
 
 func (controller *IdentityController) identityDelete(ctx *gin.Context) {
+	fName := "identitycontroller/delete"
 	var identity models.Identity
 	if err := ctx.ShouldBindJSON(&identity); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -123,42 +107,31 @@ func (controller *IdentityController) identityDelete(ctx *gin.Context) {
 	}
 
 	if identity.Identifier == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "identifier is required",
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: identifier is required", fmt.Sprintf("got :%s ", identity.Identifier))
 		return
 	}
 
 	err := controller.IdentityService.Delete(identity.Identifier, "admin")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-	})
+	common.PrepareCustomResponse(ctx, "identity deleted", nil)
 }
 
 func (controller *IdentityController) identityFilter(ctx *gin.Context) {
-
+	fName := "identitycontroller/filter"
 	identities, err := controller.IdentityService.Filter("and walletType = $walletType", map[string]interface{}{
 		"walletType": "regular_wallet",
 	}, "createdAt", 10)
 
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"body":    identities,
-	})
+	common.PrepareCustomResponse(ctx, "identities filtered", identities)
 }
 
 func (controller *IdentityController) IdentityRoutes(group *gin.RouterGroup) {

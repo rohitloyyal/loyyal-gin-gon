@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/loyyal/loyyal-be-contract/middleware"
@@ -47,43 +46,34 @@ func NewTransactionController(transactionService services.TransactionService, wa
 }
 
 func (controller *TransactionController) issue(ctx *gin.Context) {
+	fName := "transactioncontrller/issue"
 	var input TransactionInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", err))
 		return
 	}
 
 	if input.Amount <= 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": ERR_AMOUNT_NEGATIVE_OR_ZERO,
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got :%d ", input.Amount))
 		return
 	}
 
 	// check if From is valid
 	walletFrom, err := controller.WalletService.Get(input.From)
 	if common.IsStructEmpty(walletFrom) {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": ERR_INVALID_WALLET,
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
 	}
 	// check if From has available balance
 	if walletFrom.Balance <= 0 || walletFrom.Balance <= input.Amount {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": ERR_INSUFICIENT_BALANCE,
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INSUFICIENT_BALANCE.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
 	}
 
 	// check if To is valid
 	walletTo, err := controller.WalletService.Get(input.To)
 	if common.IsStructEmpty(walletTo) {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": ERR_INVALID_WALLET,
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
 	}
 
@@ -100,87 +90,135 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 
 	err = controller.TransactionService.Create(&transaction)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
 		return
 	}
 
 	// publishing to nats
 	go controller.publishTransactionToNats(ctx.Request.Context(), &transaction)
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"body":    transaction.ExtID,
-	})
+	common.PrepareCustomResponse(ctx, "points issued", struct {
+		Identifier string `json:"identifier"`
+	}{Identifier: transaction.ExtID})
 }
 
 func (controller *TransactionController) redeem(ctx *gin.Context) {
+	fName := "transactioncontrller/redeem"
 	var input TransactionInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", err))
+		return
+	}
+
+	if input.Amount <= 0 {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got :%d ", input.Amount))
+		return
+	}
+
+	// check if From is valid
+	walletFrom, err := controller.WalletService.Get(input.From)
+	if common.IsStructEmpty(walletFrom) {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
+		return
+	}
+	// check if From has available balance
+	if walletFrom.Balance <= 0 || walletFrom.Balance <= input.Amount {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INSUFICIENT_BALANCE.Error(), fmt.Sprintf("got :%v ", walletFrom))
+		return
+	}
+
+	// check if To is valid
+	walletTo, err := controller.WalletService.Get(input.To)
+	if common.IsStructEmpty(walletTo) {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
 	}
 
 	var transaction models.Transaction
 	transaction.FromExtID = input.From
 	transaction.ToExtID = input.To
+	transaction.TransactionInitiatedBy = input.TransactionInitiatedBy
+	transaction.FromUUID = walletFrom.UUID
+	transaction.ToUUID = walletTo.UUID
+
 	transaction.Amount = input.Amount
 	transaction.Metadata = input.Metadata
 	transaction.TransactionType = "redeem"
-	transaction.CreatedOn = time.Now()
 
-	err := controller.TransactionService.Create(&transaction)
+	err = controller.TransactionService.Create(&transaction)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
 		return
 	}
 
 	// publishing to nats
-	controller.publishTransactionToNats(ctx.Request.Context(), &transaction)
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"body":    transaction.RefID,
-	})
+	go controller.publishTransactionToNats(ctx.Request.Context(), &transaction)
+	common.PrepareCustomResponse(ctx, "points redeemed", struct {
+		Identifier string `json:"identifier"`
+	}{Identifier: transaction.ExtID})
 }
 
 func (controller *TransactionController) transfer(ctx *gin.Context) {
+	fName := "transactioncontrller/transfer"
 	var input TransactionInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", err))
+		return
+	}
+
+	if input.Amount <= 0 {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got :%d ", input.Amount))
+		return
+	}
+
+	// check if From is valid
+	walletFrom, err := controller.WalletService.Get(input.From)
+	if common.IsStructEmpty(walletFrom) {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
+		return
+	}
+	// check if From has available balance
+	if walletFrom.Balance <= 0 || walletFrom.Balance <= input.Amount {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INSUFICIENT_BALANCE.Error(), fmt.Sprintf("got :%v ", walletFrom))
+		return
+	}
+
+	// check if To is valid
+	walletTo, err := controller.WalletService.Get(input.To)
+	if common.IsStructEmpty(walletTo) {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
 	}
 
 	var transaction models.Transaction
 	transaction.FromExtID = input.From
 	transaction.ToExtID = input.To
+	transaction.TransactionInitiatedBy = input.TransactionInitiatedBy
+	transaction.FromUUID = walletFrom.UUID
+	transaction.ToUUID = walletTo.UUID
+
 	transaction.Amount = input.Amount
 	transaction.Metadata = input.Metadata
 	transaction.TransactionType = "transfer"
-	transaction.CreatedOn = time.Now()
 
-	err := controller.TransactionService.Create(&transaction)
+	err = controller.TransactionService.Create(&transaction)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
 		return
 	}
 
 	// publishing to nats
-	controller.publishTransactionToNats(ctx.Request.Context(), &transaction)
+	go controller.publishTransactionToNats(ctx.Request.Context(), &transaction)
+	common.PrepareCustomResponse(ctx, "points transferred", struct {
+		Identifier string `json:"identifier"`
+	}{Identifier: transaction.ExtID})
+}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"body":    transaction.RefID,
-	})
+func (controller *TransactionController) deposit(ctx *gin.Context) {
+
+}
+
+func (controller *TransactionController) withdraw(ctx *gin.Context) {
+
 }
 
 func (controller *TransactionController) TransactionGet(ctx *gin.Context) {

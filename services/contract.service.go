@@ -17,11 +17,15 @@ type ContractService struct {
 	ctx     context.Context
 }
 
+const (
+	contract_prefix = "contract"
+)
+
 func NewContract(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) ContractService {
 	return ContractService{cluster: cluster, bucket: bucket, ctx: ctx}
 }
 
-func (service *ContractService) CreateContract(contract *models.Contract, creator string, channel string) error {
+func (service *ContractService) CreateContract(contract *models.Contract, creator string, channel string) (string, error) {
 	col := service.bucket.DefaultCollection()
 	contract.Identifier = common.GenerateIdentifier(30)
 	contract.Creator = creator
@@ -30,15 +34,15 @@ func (service *ContractService) CreateContract(contract *models.Contract, creato
 	contract.CreatedAt = time.Now()
 	contract.LastUpdatedAt = time.Now()
 	contract.LastUpdatedBy = contract.Creator
-	_, err := col.Insert(contract.Identifier, contract, nil)
+	_, err := col.Insert(contract_prefix+"/"+contract.Identifier, contract, nil)
 
-	return err
+	return contract.Identifier, err
 
 }
 
 func (service *ContractService) GetContract(contractId string) (any, error) {
 	col := service.bucket.DefaultCollection()
-	doc, err := col.Get(contractId, nil)
+	doc, err := col.Get(contract_prefix+"/"+contractId, nil)
 	if doc == nil {
 		if err != nil {
 			return "", errors.New("error: no contract found")
@@ -48,9 +52,9 @@ func (service *ContractService) GetContract(contractId string) (any, error) {
 
 }
 
-func (service *WalletService) DeleteContract(walletId string, sessionedUser string) error {
+func (service *ContractService) DeleteContract(contractId string, sessionedUser string) error {
 	col := service.bucket.DefaultCollection()
-	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
+	doc, err := col.Get(contract_prefix+"/"+contractId, nil)
 	if doc == nil {
 		if err != nil {
 			return errors.New("error: no contract found")
@@ -68,7 +72,7 @@ func (service *WalletService) DeleteContract(walletId string, sessionedUser stri
 	wallet.LastUpdatedBy = sessionedUser
 
 	// TODO: need to convert it into soft delete
-	_, err = col.Replace(wallet_prefix+"/"+walletId, wallet, nil)
+	_, err = col.Replace(contract_prefix+"/"+contractId, wallet, nil)
 	return err
 
 }

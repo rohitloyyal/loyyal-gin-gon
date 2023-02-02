@@ -11,6 +11,7 @@ create transaction and use it for [issue, redeem and transfer]
 nats
 custom filter based on fields, search query, ordere by, limit, etc.
 
+capture sessioned id
 send respose header
 storing time in UTC format as 2023-01-24T16:52:14.90887+00:00
 standardise reponse using custom response

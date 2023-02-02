@@ -51,23 +51,27 @@ func init() {
 	// 	logger.Fatal("error: while loading .env file")
 	// }
 
-	//initalising database connection
-	logger.Println("couchbase connection pending")
 	connectionString := os.Getenv("COUCHBASE_CONNECTION_URI")
 	bucketName := os.Getenv("COUCHBASE_DEFAULT_BUCKET")
 
-	username := os.Getenv("COUCHBASE_USERNAME")
-	password := os.Getenv("COUCHBASE_PASSWORD")
+	database_username := os.Getenv("COUCHBASE_USERNAME")
+	database_password := os.Getenv("COUCHBASE_PASSWORD")
 
-	if connectionString == "" || bucketName == "" || username == "" || password == "" {
+	bootstrap_username := os.Getenv("BOOTSTRAP_USERNAME")
+	bootstrap_password := os.Getenv("BOOTSTRAP_PASSWORD")
+
+	if connectionString == "" || bucketName == "" || database_username == "" ||
+		database_password == "" || bootstrap_username == "" || bootstrap_password == "" {
 		logger.Fatal("error: missing environment configuration")
 	}
 
+	//initalising database connection
+	logger.Println("couchbase connection pending")
 	// For a secure cluster connection, use `couchbases://<your-cluster-ip>` instead.
 	cluster, err = gocb.Connect("couchbase://"+connectionString, gocb.ClusterOptions{
 		Authenticator: gocb.PasswordAuthenticator{
-			Username: username,
-			Password: password,
+			Username: database_username,
+			Password: database_password,
 		},
 	})
 
@@ -107,6 +111,11 @@ func init() {
 	transactionController = controllers.NewTransactionController(transactionService, walletService, queueService)
 	contractController = controllers.NewContractController(contractService)
 
+	// create bootstrap identity
+	err = identityService.CreateBootstrapIdentity(bootstrap_username, bootstrap_password)
+	if err != nil {
+		logger.Fatalf("bootstrap errors: %v", err)
+	}
 	server = gin.Default()
 }
 

@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/services"
+	"github.com/loyyal/loyyal-be-contract/utils/common"
 )
 
 type AuthController struct {
@@ -17,7 +19,6 @@ type RegisterInput struct {
 	Password string `json:"password" binding:"required"`
 }
 
-
 func NewAuthController(service services.UserService) AuthController {
 	return AuthController{
 		UserService: service,
@@ -25,12 +26,10 @@ func NewAuthController(service services.UserService) AuthController {
 }
 
 func (controller *AuthController) Login(ctx *gin.Context) {
-
+	fName := "controllers/authController/login"
 	var input RegisterInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", input))
 		return
 	}
 
@@ -40,25 +39,21 @@ func (controller *AuthController) Login(ctx *gin.Context) {
 
 	token, err := controller.UserService.Login(&user)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"data":    token,
-	})
+	common.PrepareCustomResponse(ctx, "logged in successfully", struct {
+		Token string `json:"token"`
+	}{Token: token})
 }
 
 func (controller *AuthController) Register(ctx *gin.Context) {
-
+	fName := "controllers/authController/register"
 	var input RegisterInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", input))
+
 		return
 	}
 
@@ -68,15 +63,11 @@ func (controller *AuthController) Register(ctx *gin.Context) {
 
 	err := controller.UserService.Register(&user)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-	})
+	common.PrepareCustomResponse(ctx, "registered successfully", nil)
 }
 
 func (controller *AuthController) AuthRoutes(group *gin.RouterGroup) {

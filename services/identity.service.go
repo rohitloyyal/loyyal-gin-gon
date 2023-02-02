@@ -28,6 +28,16 @@ func NewIdentity(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context
 	return IdentityService{cluster: cluster, bucket: bucket, ctx: ctx}
 }
 
+func (service *IdentityService) CreateBootstrapIdentity(username string, password string) error {
+	var identity models.Identity
+	identity.Username = username
+	identity.Username = password
+	identity.IdentityType = "admin"
+
+	_, err := service.Create(&identity)
+	return err
+}
+
 func (service *IdentityService) Create(identity *models.Identity) (string, error) {
 	identity.DocType = "user"
 	identity.Identifier = common.GenerateIdentifier(30)
@@ -38,10 +48,14 @@ func (service *IdentityService) Create(identity *models.Identity) (string, error
 	}
 	identity.Password = string(hashedPassword)
 	identity.Channel = "loyyalchannel"
-	identity.IdentityType = "consumer"
-	identity.Creator = "admin"
-	identity.Status = "active"
+	if identity.IdentityType == "" {
+		identity.IdentityType = "consumer"
+	}
+	if identity.Creator == "" {
+		identity.Creator = "admin"
+	}
 
+	identity.Status = "active"
 	identity.CreatedAt = time.Now()
 	identity.LastUpdatedAt = time.Now()
 	identity.LastUpdatedBy = identity.Creator
