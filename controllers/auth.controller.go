@@ -17,6 +17,7 @@ type RegisterInput struct {
 	Password string `json:"password" binding:"required"`
 }
 
+
 func NewAuthController(service services.UserService) AuthController {
 	return AuthController{
 		UserService: service,

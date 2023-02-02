@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
@@ -11,12 +12,13 @@ import (
 )
 
 type ContractService struct {
-	bucket *gocb.Bucket
-	ctx    context.Context
+	cluster *gocb.Cluster
+	bucket  *gocb.Bucket
+	ctx     context.Context
 }
 
-func NewContract(bucket *gocb.Bucket, ctx context.Context) ContractService {
-	return ContractService{bucket: bucket, ctx: ctx}
+func NewContract(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) ContractService {
+	return ContractService{cluster: cluster, bucket: bucket, ctx: ctx}
 }
 
 func (service *ContractService) CreateContract(contract *models.Contract, creator string, channel string) error {
@@ -69,4 +71,42 @@ func (service *WalletService) DeleteContract(walletId string, sessionedUser stri
 	_, err = col.Replace(wallet_prefix+"/"+walletId, wallet, nil)
 	return err
 
+}
+
+func (service *ContractService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Contract, error) {
+
+	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
+	query := "select data.* from `testbucket`.`_default`.`_default` data where type='contract' "
+	query += queryString
+	query += " order by " + sortBy
+	query += " limit " + strconv.Itoa(limit)
+
+	rows, err := service.cluster.Query(
+		query,
+		&gocb.QueryOptions{NamedParameters: params})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return parseClusterRows(rows), nil
+}
+
+func parseClusterRows(rows *gocb.QueryResult) []*models.Contract {
+	var contracts []*models.Contract
+	for rows.Next() {
+		var obj models.Contract
+		err := rows.Row(&obj)
+		if err != nil {
+			panic(err)
+		}
+		contracts = append(contracts, &obj)
+	}
+	defer rows.Close()
+	err := rows.Err()
+	if err != nil {
+		panic(err)
+	}
+
+	return contracts
 }

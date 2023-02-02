@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"html"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,16 +15,17 @@ import (
 )
 
 type IdentityService struct {
-	bucket *gocb.Bucket
-	ctx    context.Context
+	cluster *gocb.Cluster
+	bucket  *gocb.Bucket
+	ctx     context.Context
 }
 
 const (
 	identity_prefix = "user"
 )
 
-func NewIdentity(bucket *gocb.Bucket, ctx context.Context) IdentityService {
-	return IdentityService{bucket: bucket, ctx: ctx}
+func NewIdentity(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) IdentityService {
+	return IdentityService{cluster: cluster, bucket: bucket, ctx: ctx}
 }
 
 func (service *IdentityService) Create(identity *models.Identity) (string, error) {
@@ -67,14 +69,6 @@ func (service *IdentityService) Get(identityId string) (any, error) {
 	}
 
 	return identity, err
-}
-
-func (service *IdentityService) Filter(contract *models.Identity) error {
-	col := service.bucket.DefaultCollection()
-	_, err := col.Upsert(contract.Identifier, contract, nil)
-
-	return err
-
 }
 
 func (service *IdentityService) Update(identityId string, personalDetails models.PersonalDetails) error {
@@ -125,4 +119,42 @@ func (service *IdentityService) Delete(identityId string, sessionedUser string) 
 
 	return err
 
+}
+
+func (service *IdentityService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Identity, error) {
+
+	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
+	query := "select data.* from `testbucket`.`_default`.`_default` data where type='wallet' "
+	query += queryString
+	query += " order by " + sortBy
+	query += " limit " + strconv.Itoa(limit)
+
+	rows, err := service.cluster.Query(
+		query,
+		&gocb.QueryOptions{NamedParameters: params})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return parseIdentityRows(rows), nil
+}
+
+func parseIdentityRows(rows *gocb.QueryResult) []*models.Identity {
+	var identitys []*models.Identity
+	for rows.Next() {
+		var obj models.Identity
+		err := rows.Row(&obj)
+		if err != nil {
+			panic(err)
+		}
+		identitys = append(identitys, &obj)
+	}
+	defer rows.Close()
+	err := rows.Err()
+	if err != nil {
+		panic(err)
+	}
+
+	return identitys
 }

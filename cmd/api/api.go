@@ -95,15 +95,15 @@ func init() {
 
 	// controller and service
 	userService = services.NewUserService(bucket, ctx)
-	identityService = services.NewIdentity(bucket, ctx)
-	walletService = services.NewWallet(bucket, ctx)
-	transactionService = services.NewTransaction(bucket, ctx)
-	contractService = services.NewContract(bucket, ctx)
+	identityService = services.NewIdentity(cluster, bucket, ctx)
+	walletService = services.NewWallet(cluster, bucket, ctx)
+	transactionService = services.NewTransaction(cluster, bucket, ctx)
+	contractService = services.NewContract(cluster, bucket, ctx)
 
 	authController = controllers.NewAuthController(userService)
 	identityController = controllers.NewIdentityController(identityService)
 	walletController = controllers.NewWallet(walletService, queueService)
-	transactionController = controllers.NewTransactionController(transactionService, queueService)
+	transactionController = controllers.NewTransactionController(transactionService, walletService, queueService)
 	contractController = controllers.NewContractController(contractService)
 
 	server = gin.Default()

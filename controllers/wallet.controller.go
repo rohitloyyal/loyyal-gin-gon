@@ -60,7 +60,7 @@ func (controller *WalletController) walletCreate(ctx *gin.Context) {
 	})
 }
 
-func (controller *WalletController) WalletGet(ctx *gin.Context) {
+func (controller *WalletController) walletGet(ctx *gin.Context) {
 	// get data from body
 	walletId := ctx.Query("walletId")
 	if walletId == "" {
@@ -113,11 +113,31 @@ func (controller *WalletController) walletDelete(ctx *gin.Context) {
 	})
 }
 
+func (controller *WalletController) walletFilter(ctx *gin.Context) {
+
+	transaction, err := controller.WalletService.Filter("and walletType = $walletType", map[string]interface{}{
+		"walletType": "regular_wallet",
+	}, "createdAt", 10)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"body":    transaction,
+	})
+}
+
 func (controller *WalletController) WalletRoutes(group *gin.RouterGroup) {
 	walletRoute := group.Group("/wallet")
 	walletRoute.Use(middleware.JWTAuthMiddleware())
 
-	walletRoute.GET("/get", controller.WalletGet)
+	walletRoute.GET("/get", controller.walletGet)
+	walletRoute.POST("/filter", controller.walletFilter)
 	walletRoute.POST("/create", controller.walletCreate)
 	walletRoute.DELETE("/delete", controller.walletDelete)
 }

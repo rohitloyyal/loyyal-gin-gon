@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/couchbase/gocb/v2"
@@ -13,16 +14,17 @@ import (
 )
 
 type WalletService struct {
-	bucket *gocb.Bucket
-	ctx    context.Context
+	cluster *gocb.Cluster
+	bucket  *gocb.Bucket
+	ctx     context.Context
 }
 
 const (
 	wallet_prefix = "wallet"
 )
 
-func NewWallet(bucket *gocb.Bucket, ctx context.Context) WalletService {
-	return WalletService{bucket: bucket, ctx: ctx}
+func NewWallet(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) WalletService {
+	return WalletService{cluster: cluster, bucket: bucket, ctx: ctx}
 }
 
 func (service *WalletService) Create(wallet *models.Wallet, linkedTo string, preLoadAmount int64) error {
@@ -50,11 +52,7 @@ func (service *WalletService) Create(wallet *models.Wallet, linkedTo string, pre
 
 	col := service.bucket.DefaultCollection()
 	_, err = col.Insert(wallet_prefix+"/"+wallet.Identifier, wallet, nil)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func publishWalletCreate(ctx context.Context, nats *nats.Client, wallet *models.Wallet) {
@@ -63,30 +61,22 @@ func publishWalletCreate(ctx context.Context, nats *nats.Client, wallet *models.
 	}
 }
 
-func (service *WalletService) Get(walletId string) (any, error) {
+func (service *WalletService) Get(walletId string) (models.Wallet, error) {
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
 	if doc == nil {
 		if err != nil {
-			return "", errors.New("error: no wallet found")
+			return models.Wallet{}, errors.New("error: no wallet found")
 		}
 	}
 
 	var wallet models.Wallet
 	doc.Content(&wallet)
 	if err != nil {
-		return nil, err
+		return models.Wallet{}, err
 	}
 
-	return doc, err
-
-}
-
-func (service *WalletService) Filter(contract *models.Wallet) error {
-	col := service.bucket.DefaultCollection()
-	_, err := col.Upsert(contract.Identifier, contract, nil)
-
-	return err
+	return wallet, err
 
 }
 
@@ -113,4 +103,42 @@ func (service *WalletService) Delete(walletId string, sessionedUser string) erro
 	_, err = col.Replace(wallet_prefix+"/"+walletId, wallet, nil)
 	return err
 
+}
+
+func (service *WalletService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
+
+	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
+	query := "select data.* from `testbucket`.`_default`.`_default` data where type='wallet' "
+	query += queryString
+	query += " order by " + sortBy
+	query += " limit " + strconv.Itoa(limit)
+
+	rows, err := service.cluster.Query(
+		query,
+		&gocb.QueryOptions{NamedParameters: params})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return parseWalletRows(rows), nil
+}
+
+func parseWalletRows(rows *gocb.QueryResult) []*models.Wallet {
+	var wallets []*models.Wallet
+	for rows.Next() {
+		var obj models.Wallet
+		err := rows.Row(&obj)
+		if err != nil {
+			panic(err)
+		}
+		wallets = append(wallets, &obj)
+	}
+	defer rows.Close()
+	err := rows.Err()
+	if err != nil {
+		panic(err)
+	}
+
+	return wallets
 }

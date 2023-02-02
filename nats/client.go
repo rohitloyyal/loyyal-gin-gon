@@ -41,7 +41,7 @@ func (c *Client) Publish(ctx context.Context, msg TopicEncoder) error {
 		trace.StringAttribute("message", string(b)),
 		trace.StringAttribute("topic", msg.TopicName()),
 	)
-	msg.TopicName()
+	
 
-	return c.nats.Publish("create.loyyalchannel", b)
+	return c.nats.Publish(msg.TopicName(), b)
 }

@@ -99,6 +99,25 @@ func (controller *ContractController) ContractDelete(ctx *gin.Context) {
 	})
 }
 
+func (controller *ContractController) ContractFilter(ctx *gin.Context) {
+
+	contracts, err := controller.ContractService.Filter("and contractType = $contractType", map[string]interface{}{
+		"contractType": "Regular",
+	}, "createdAt", 10)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"body":    contracts,
+	})
+}
+
 func (controller *ContractController) SendEmail(ctx *gin.Context) {
 	go notification.SendEmailNotification("rohit@loyyal.com", "Testing Sendgrid Email")
 
@@ -112,6 +131,7 @@ func (controller *ContractController) ContractRoutes(group *gin.RouterGroup) {
 	contractRoute.Use(middleware.JWTAuthMiddleware())
 
 	contractRoute.GET("/get", controller.ContractGet)
+	contractRoute.POST("/filter", controller.ContractFilter)
 	contractRoute.POST("/create", controller.ContractCreate)
 	contractRoute.DELETE("/delete", controller.ContractDelete)
 	contractRoute.GET("/send-email", controller.SendEmail)

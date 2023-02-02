@@ -142,12 +142,31 @@ func (controller *IdentityController) identityDelete(ctx *gin.Context) {
 	})
 }
 
+func (controller *IdentityController) identityFilter(ctx *gin.Context) {
+
+	identities, err := controller.IdentityService.Filter("and walletType = $walletType", map[string]interface{}{
+		"walletType": "regular_wallet",
+	}, "createdAt", 10)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"body":    identities,
+	})
+}
+
 func (controller *IdentityController) IdentityRoutes(group *gin.RouterGroup) {
 	identityRoute := group.Group("/identity")
 	identityRoute.Use(middleware.JWTAuthMiddleware())
 
 	identityRoute.GET("/get", controller.IdentityGet)
-	// identityRoute.POST("/filter", controller.identityCreate)
+	identityRoute.POST("/filter", controller.identityFilter)
 	identityRoute.POST("/create", controller.identityCreate)
 	identityRoute.PUT("/update", controller.IdentityUpdate)
 	identityRoute.DELETE("/delete", controller.identityDelete)
