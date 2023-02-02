@@ -23,6 +23,7 @@ var (
 	server       *gin.Engine
 	queueService *nats.Client
 
+	commonController      controllers.CommonController
 	contractController    controllers.ContractController
 	authController        controllers.AuthController
 	identityController    controllers.IdentityController
@@ -114,6 +115,7 @@ func main() {
 	defer cluster.Close(nil)
 
 	basepath := server.Group("/v1")
+	commonController.CommonRoutes(basepath)
 	authController.AuthRoutes(basepath)
 	identityController.IdentityRoutes(basepath)
 	walletController.WalletRoutes(basepath)
