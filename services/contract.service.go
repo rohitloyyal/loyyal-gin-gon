@@ -27,7 +27,9 @@ func NewContract(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context
 
 func (service *ContractService) CreateContract(contract *models.Contract, creator string, channel string) (string, error) {
 	col := service.bucket.DefaultCollection()
+	contract.DocType = "contract"
 	contract.Identifier = common.GenerateIdentifier(30)
+
 	contract.Creator = creator
 	contract.Channel = channel
 	contract.Status = "active"
@@ -61,7 +63,7 @@ func (service *ContractService) DeleteContract(contractId string, sessionedUser 
 		}
 	}
 
-	var wallet models.Wallet
+	var wallet models.Contract
 	err = doc.Content(&wallet)
 	if err != nil {
 		return err
@@ -77,13 +79,40 @@ func (service *ContractService) DeleteContract(contractId string, sessionedUser 
 
 }
 
+func (service *ContractService) MarkContractAsExpired(contractId string, sessionedUser string) error {
+	col := service.bucket.DefaultCollection()
+	doc, err := col.Get(contract_prefix+"/"+contractId, nil)
+	if doc == nil {
+		if err != nil {
+			return errors.New("error: no contract found")
+		}
+	}
+
+	var wallet models.Wallet
+	err = doc.Content(&wallet)
+	if err != nil {
+		return err
+	}
+
+	wallet.Status = EXPIRED
+	wallet.LastUpdatedAt = time.Now()
+	wallet.LastUpdatedBy = sessionedUser
+
+	// TODO: need to convert it into soft delete
+	_, err = col.Replace(contract_prefix+"/"+contractId, wallet, nil)
+	return err
+
+}
+
 func (service *ContractService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Contract, error) {
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
 	query := "select data.* from `testbucket`.`_default`.`_default` data where type='contract' "
 	query += queryString
 	query += " order by " + sortBy
-	query += " limit " + strconv.Itoa(limit)
+	if limit != -1 {
+		query += " limit " + strconv.Itoa(limit)
+	}
 
 	rows, err := service.cluster.Query(
 		query,

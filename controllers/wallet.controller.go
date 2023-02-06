@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -25,20 +26,28 @@ func NewWallet(service services.WalletService, nats *nats.Client) WalletControll
 	}
 }
 
+type WalletCreateRequest struct {
+	WalletType   string          `json:"walletType" binding:"required"`
+	Name         string          `json:"name" binding:"required"`
+	Metadata     json.RawMessage `json:"metadata"`
+	PreLoadValue int64           `json:"preLoadValue"`
+	LinkedTo     string          `json:"linkedTo" binding:"required"`
+}
+
 func (controller *WalletController) walletCreate(ctx *gin.Context) {
 	fName := "controller/wallet/create"
-	var wallet models.Wallet
-	if err := ctx.ShouldBindJSON(&wallet); err != nil {
+	var request WalletCreateRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
 		return
 	}
 
-	if wallet.Name == "" {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: name is required", fmt.Sprintf("got :%s ", wallet.Name))
-		return
-	}
+	var wallet models.Wallet
+	wallet.Name = request.Name
+	wallet.Metadata = request.Metadata
+	wallet.WalletType = request.WalletType
 
-	err := controller.WalletService.Create(&wallet, "", 0)
+	err := controller.WalletService.Create(&wallet, request.LinkedTo, request.PreLoadValue)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
 		return
@@ -99,9 +108,7 @@ func (controller *WalletController) walletDelete(ctx *gin.Context) {
 
 func (controller *WalletController) walletFilter(ctx *gin.Context) {
 	fName := "controller/wallet/filter"
-	transactions, err := controller.WalletService.Filter("and walletType = $walletType", map[string]interface{}{
-		"walletType": "regular_wallet",
-	}, "createdAt", 10)
+	transactions, err := controller.WalletService.Filter("AND isDeleted=false", map[string]interface{}{}, "createdAt", -1)
 
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
@@ -113,6 +120,7 @@ func (controller *WalletController) walletFilter(ctx *gin.Context) {
 
 func (controller *WalletController) WalletRoutes(group *gin.RouterGroup) {
 	walletRoute := group.Group("/wallet")
+
 	walletRoute.Use(middleware.JWTAuthMiddleware())
 
 	walletRoute.GET("/get", controller.walletGet)

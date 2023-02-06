@@ -23,6 +23,13 @@ const (
 	wallet_prefix = "wallet"
 )
 
+const (
+	ACTIVE     = "active"
+	SUBSPENDED = "suspended"
+	DISABLED   = "disabled"
+	EXPIRED    = "expired"
+)
+
 func NewWallet(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) WalletService {
 	return WalletService{cluster: cluster, bucket: bucket, ctx: ctx}
 }
@@ -36,7 +43,7 @@ func (service *WalletService) Create(wallet *models.Wallet, linkedTo string, pre
 
 	wallet.WalletType = "regular"
 	wallet.Creator = "admin"
-	wallet.Status = "active"
+	wallet.Status = ACTIVE
 
 	wallet.CreatedAt = time.Now()
 	wallet.LastUpdatedAt = time.Now()
@@ -108,10 +115,36 @@ func (service *WalletService) Delete(walletId string, sessionedUser string) erro
 func (service *WalletService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
-	query := "select data.* from `testbucket`.`_default`.`_default` data where type='wallet' "
+	query := "select data.* from `testbucket` data where type='wallet' "
 	query += queryString
 	query += " order by " + sortBy
-	query += " limit " + strconv.Itoa(limit)
+	if limit != -1 {
+		query += " limit " + strconv.Itoa(limit)
+	}
+
+	rows, err := service.cluster.Query(
+		query,
+		&gocb.QueryOptions{NamedParameters: params})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return parseWalletRows(rows), nil
+}
+
+/*
+Implemented for the linked wallets only
+*/
+func (service *WalletService) CustomFilterQuery(selector string, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
+
+	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
+	query := "select "+selector+" from `testbucket` where type='wallet' "
+	query += queryString
+	query += " order by " + sortBy
+	if limit != -1 {
+		query += " limit " + strconv.Itoa(limit)
+	}
 
 	rows, err := service.cluster.Query(
 		query,

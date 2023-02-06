@@ -78,9 +78,6 @@ func PrepareCustomError(ctx *gin.Context, errorCode int, functionName string, di
 	if err != nil {
 		errID = "unknown(" + err.Error() + ")"
 	}
-	ctx.Header("Access-Control-Allow-Methods", "*")
-	ctx.Header("Access-Control-Allow-Headers", "*")
-	ctx.Header("Access-Control-Allow-Origin", "*")
 
 	ctx.Header("X-ErrID", errID)
 	fmt.Printf("api error id=%q,path=%q,function name= %s,code=%d,err=%q,detail=%q", errID, ctx.Request.URL, functionName, errorCode, displayMessage, details)
@@ -94,10 +91,6 @@ func PrepareCustomError(ctx *gin.Context, errorCode int, functionName string, di
 }
 
 func PrepareCustomResponse(ctx *gin.Context, displayMessage string, body any) {
-	ctx.Header("Access-Control-Allow-Methods", "*")
-	ctx.Header("Access-Control-Allow-Headers", "*")
-	ctx.Header("Access-Control-Allow-Origin", "*")
-
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    http.StatusOK,
 		"message": displayMessage,

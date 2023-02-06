@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GenerateToken(user_id string) (string, error) {
+func GenerateToken(email string, role string, name string) (string, error) {
 	token_expiry, err := strconv.Atoi(os.Getenv("JWT_TOKEN_VALIDITY"))
 
 	if err != nil {
@@ -20,7 +20,9 @@ func GenerateToken(user_id string) (string, error) {
 
 	claims := jwt.MapClaims{}
 	claims["authorized"] = true
-	claims["user_id"] = user_id
+	claims["sub"] = email
+	claims["name"] = name
+	claims["aud"] = role
 	claims["exp"] = time.Now().Add(time.Hour * time.Duration(token_expiry)).Unix()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 

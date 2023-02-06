@@ -32,17 +32,12 @@ func (controller *ContractController) ContractCreate(ctx *gin.Context) {
 		return
 	}
 
-	if contract.ContractId <= 0 {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: contract id is required", fmt.Sprintf("contract id is required. got %d ", contract.ContractId))
-		return
-	}
-
 	if contract.ValidFrom.Unix() < time.Now().Unix() || contract.ValidUntill.Unix() < time.Now().Unix() {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: previous date contract can not be created", fmt.Sprintf("previous date contract can not be created. got from: %d and untill :%d ", contract.ValidFrom, contract.ValidUntill))
 		return
 	}
 
-	identifier, err := controller.ContractService.CreateContract(&contract, "creator", "loyyalchannel")
+	identifier, err := controller.ContractService.CreateContract(&contract, "admin", "loyyalchannel")
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": err.Error(),
@@ -79,13 +74,19 @@ func (controller *ContractController) ContractGet(ctx *gin.Context) {
 
 func (controller *ContractController) ContractDelete(ctx *gin.Context) {
 	fName := "controllers/ContractDelete"
-	contractId := ctx.Param("contractId")
-	if contractId == "" {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: contractId is required", fmt.Sprintf("got :%s ", contractId))
+	var contract struct {
+		Identifier string `json:"identifier" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&contract); err != nil {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got %s ", err.Error()))
 		return
 	}
 
-	err := controller.ContractService.DeleteContract(contractId, "admin")
+	if contract.Identifier == "" {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: contrct identifier is required", fmt.Sprintf("got %s ", contract.Identifier))
+	}
+
+	err := controller.ContractService.DeleteContract(contract.Identifier, "admin")
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -96,16 +97,15 @@ func (controller *ContractController) ContractDelete(ctx *gin.Context) {
 
 func (controller *ContractController) ContractFilter(ctx *gin.Context) {
 	fName := "controller/ContractFilter"
-	contracts, err := controller.ContractService.Filter("and contractType = $contractType", map[string]interface{}{
-		"contractType": "Regular",
-	}, "createdAt", 10)
+	// TODO: should make filter as dynamic based on the filters passed in request body
+	contracts, err := controller.ContractService.Filter("AND isDeleted=false", map[string]interface{}{}, "createdAt", -1)
 
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	common.PrepareCustomResponse(ctx, "contract deleted", contracts)
+	common.PrepareCustomResponse(ctx, "contract filtered", contracts)
 }
 
 func (controller *ContractController) SendEmail(ctx *gin.Context) {
@@ -116,6 +116,7 @@ func (controller *ContractController) SendEmail(ctx *gin.Context) {
 
 func (controller *ContractController) ContractRoutes(group *gin.RouterGroup) {
 	contractRoute := group.Group("/contract")
+
 	contractRoute.Use(middleware.JWTAuthMiddleware())
 
 	contractRoute.GET("/get", controller.ContractGet)

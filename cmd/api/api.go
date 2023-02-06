@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/loyyal/loyyal-be-contract/controllers"
+	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
 )
@@ -30,7 +31,7 @@ var (
 	walletController      controllers.WalletController
 	transactionController controllers.TransactionController
 
-	userService        services.UserService
+	authService        services.AuthService
 	identityService    services.IdentityService
 	walletService      services.WalletService
 	transactionService services.TransactionService
@@ -99,16 +100,16 @@ func init() {
 	logger.Println("nats connection established")
 
 	// controller and service
-	userService = services.NewUserService(bucket, ctx)
+	authService = services.NewAuthService(cluster, bucket, ctx)
 	identityService = services.NewIdentity(cluster, bucket, ctx)
 	walletService = services.NewWallet(cluster, bucket, ctx)
 	transactionService = services.NewTransaction(cluster, bucket, ctx)
 	contractService = services.NewContract(cluster, bucket, ctx)
 
-	authController = controllers.NewAuthController(userService)
-	identityController = controllers.NewIdentityController(identityService)
+	authController = controllers.NewAuthController(identityService)
+	identityController = controllers.NewIdentityController(logger, identityService, walletService)
 	walletController = controllers.NewWallet(walletService, queueService)
-	transactionController = controllers.NewTransactionController(transactionService, walletService, queueService)
+	transactionController = controllers.NewTransactionController(logger, transactionService, contractService, walletService, queueService)
 	contractController = controllers.NewContractController(contractService)
 
 	// create bootstrap identity
@@ -116,12 +117,15 @@ func init() {
 	if err != nil {
 		logger.Fatalf("bootstrap errors: %v", err)
 	}
+	logger.Println("admin identity bootstraped")
 	server = gin.Default()
 }
 
 func main() {
 	logger.Println("starting...")
 	defer cluster.Close(nil)
+
+	server.Use(middleware.CORSMiddleware())
 
 	basepath := server.Group("/v1")
 	commonController.CommonRoutes(basepath)

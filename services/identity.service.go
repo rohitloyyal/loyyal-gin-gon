@@ -11,6 +11,7 @@ import (
 	"github.com/couchbase/gocb/v2"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
+	"github.com/loyyal/loyyal-be-contract/utils/token"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -31,11 +32,48 @@ func NewIdentity(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context
 func (service *IdentityService) CreateBootstrapIdentity(username string, password string) error {
 	var identity models.Identity
 	identity.Username = username
-	identity.Username = password
+	identity.Password = password
 	identity.IdentityType = "admin"
 
 	_, err := service.Create(&identity)
 	return err
+}
+
+func (service *IdentityService) Login(user *models.Identity) (string, error) {
+	identities, err := service.Filter("and username = $username and isDeleted=false", map[string]interface{}{
+		"username": user.Username,
+	}, "createdAt", 1)
+
+	if err != nil {
+		return "", err
+	}
+	if len(identities) != 1 || identities[0] == nil {
+		return "", errors.New("error: no user found")
+	}
+
+	registeredUser := identities[0]
+	err = VerifyPassword(user.Password, registeredUser.Password)
+	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword {
+		return "", errors.New("error: invalid credentials")
+	}
+
+	if registeredUser.Status != "active" {
+		return "", errors.New("error: this account is inactive or disabled")
+	}
+
+	// TODO: save session token in db
+	// err = service.saveSession()
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	// generate token
+	token, err := token.GenerateToken(registeredUser.Username, registeredUser.IdentityType, registeredUser.PersonalDetails.FirstName)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
 
 func (service *IdentityService) Create(identity *models.Identity) (string, error) {
@@ -55,7 +93,7 @@ func (service *IdentityService) Create(identity *models.Identity) (string, error
 		identity.Creator = "admin"
 	}
 
-	identity.Status = "active"
+	identity.Status = ACTIVE
 	identity.CreatedAt = time.Now()
 	identity.LastUpdatedAt = time.Now()
 	identity.LastUpdatedBy = identity.Creator
@@ -138,10 +176,12 @@ func (service *IdentityService) Delete(identityId string, sessionedUser string) 
 func (service *IdentityService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Identity, error) {
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
-	query := "select data.* from `testbucket`.`_default`.`_default` data where type='wallet' "
+	query := "select data.* from `testbucket`.`_default`.`_default` data where type='user' "
 	query += queryString
 	query += " order by " + sortBy
-	query += " limit " + strconv.Itoa(limit)
+	if limit != -1 {
+		query += " limit " + strconv.Itoa(limit)
+	}
 
 	rows, err := service.cluster.Query(
 		query,

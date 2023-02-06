@@ -29,12 +29,13 @@ type Contract struct {
 	EarnConversionRatio int64 `json:"earnConversionRatio" binding:"required"`
 	BurnConversionRatio int64 `json:"burnConversionRatio" binding:"required"`
 	// Creator records the user that created the record.
-	Creator string `json:"-"`
+	Creator string `json:"creator"`
 	// Channel records the channel on which the wallet will be written.
-	Channel string `json:"-"`
+	Channel string `json:"channel"`
 
 	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"createdAt"`
 	LastUpdatedAt time.Time `json:"lastUpdatedAt"`
 	LastUpdatedBy string    `json:"lastUpdatedBy"`
+	IsDeleted     bool      `json:"isDeleted"`
 }

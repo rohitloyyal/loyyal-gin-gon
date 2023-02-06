@@ -95,7 +95,9 @@ func (service *TransactionService) Filter(queryString string, params map[string]
 	query := "select data.* from `testbucket`.`_default`.`_default` data where type='tx' "
 	query += queryString
 	query += " order by " + sortBy
-	query += " limit " + strconv.Itoa(limit)
+	if limit != -1 {
+		query += " limit " + strconv.Itoa(limit)
+	}
 
 	rows, err := service.cluster.Query(
 		query,
