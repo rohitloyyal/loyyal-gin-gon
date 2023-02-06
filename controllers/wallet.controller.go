@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,15 +15,17 @@ import (
 )
 
 type WalletController struct {
-	WalletService services.WalletService
-	Nats          *nats.Client
+	WalletService      services.WalletService
+	TransactionService services.TransactionService
+	Nats               *nats.Client
 }
 
 // constructor calling
-func NewWallet(service services.WalletService, nats *nats.Client) WalletController {
+func NewWallet(service services.WalletService, transactionService services.TransactionService, nats *nats.Client) WalletController {
 	return WalletController{
-		WalletService: service,
-		Nats:          nats,
+		WalletService:      service,
+		TransactionService: transactionService,
+		Nats:               nats,
 	}
 }
 
@@ -34,11 +37,16 @@ type WalletCreateRequest struct {
 	LinkedTo     string          `json:"linkedTo" binding:"required"`
 }
 
+type WalletMergeRequest struct {
+	From []string `json:"from" binding:"required"`
+	To   string   `json:"to" binding:"required"`
+}
+
 func (controller *WalletController) walletCreate(ctx *gin.Context) {
 	fName := "controller/wallet/create"
 	var request WalletCreateRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invlaid request body provided", fmt.Sprintf("got :%d ", err))
 		return
 	}
 
@@ -49,7 +57,7 @@ func (controller *WalletController) walletCreate(ctx *gin.Context) {
 
 	err := controller.WalletService.Create(&wallet, request.LinkedTo, request.PreLoadValue)
 	if err != nil {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error while creating wallet", fmt.Sprintf("got :%d ", err))
 		return
 	}
 
@@ -62,6 +70,69 @@ func (controller *WalletController) walletCreate(ctx *gin.Context) {
 	common.PrepareCustomResponse(ctx, "wallet created", struct {
 		Identifier string `json:"identifier"`
 	}{Identifier: wallet.Identifier})
+}
+
+func (controller *WalletController) walletMerge(ctx *gin.Context) {
+	fName := "controller/wallet/merge"
+	var request WalletMergeRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%d ", err))
+		return
+	}
+
+	if len(request.From) < 1 {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: atlest one wallet is reqired", fmt.Sprintf("got :%s ", request.From))
+		return
+	}
+
+	toWallet, err := controller.WalletService.Get(request.To)
+	if err != nil {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
+		return
+	}
+
+	if common.IsStructEmpty(toWallet) {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: no wallet found with "+request.To, fmt.Sprintf("got :%s ", request.To))
+		return
+	}
+
+	// recursively, get all FROM wallet and transfer their balance to TO wallet
+	for _, walletIdentifier := range request.From {
+		wallet, err := controller.WalletService.Get(walletIdentifier)
+		if err != nil {
+			common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
+			return
+		}
+
+		if common.IsStructEmpty(wallet) {
+			common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: no wallet found with "+walletIdentifier, fmt.Sprintf("got :%s ", walletIdentifier))
+			return
+		}
+
+		var transaction models.Transaction
+		transaction.FromExtID = wallet.Identifier
+		transaction.ToExtID = toWallet.Identifier
+		transaction.FromUUID = wallet.UUID
+		transaction.ToUUID = toWallet.UUID
+		transaction.Amount = wallet.Balance
+		transaction.TransactionType = "merge"
+		transaction.Remarks = "merged into the wallet " + toWallet.Identifier
+
+		err = controller.TransactionService.Create(&transaction)
+		if err != nil {
+			common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
+			return
+		}
+
+		// publishing to nats
+		// do not need apply the business contract
+		go controller.publishTxToNats(ctx.Request.Context(), &transaction)
+
+		// markging wallet as disabled
+		controller.WalletService.Update(wallet.Identifier, "admin", "disabled")
+
+	}
+	common.PrepareCustomResponse(ctx, "wallet merged", nil)
 }
 
 func (controller *WalletController) walletGet(ctx *gin.Context) {
@@ -118,6 +189,24 @@ func (controller *WalletController) walletFilter(ctx *gin.Context) {
 	common.PrepareCustomResponse(ctx, "transactions fetched", transactions)
 }
 
+func (controller *WalletController) publishTxToNats(ctx context.Context, transaction *models.Transaction) {
+
+	var request nats.TopicEncoder
+	request = &models.TransferRequest{
+		RefID:   transaction.RefID,
+		From:    transaction.FromUUID,
+		To:      transaction.ToUUID,
+		Channel: transaction.Channel,
+		Amount:  transaction.Amount,
+		Update:  !transaction.Spend,
+	}
+
+	if err := controller.Nats.Publish(ctx, request); err != nil {
+		fmt.Print("failed to write merge transaction to NATS (failing over to retry service): %w", err)
+		// TODO: execute the retry flow from here
+	}
+}
+
 func (controller *WalletController) WalletRoutes(group *gin.RouterGroup) {
 	walletRoute := group.Group("/wallet")
 
@@ -126,5 +215,6 @@ func (controller *WalletController) WalletRoutes(group *gin.RouterGroup) {
 	walletRoute.GET("/get", controller.walletGet)
 	walletRoute.POST("/filter", controller.walletFilter)
 	walletRoute.POST("/create", controller.walletCreate)
+	walletRoute.POST("/merge", controller.walletMerge)
 	walletRoute.DELETE("/delete", controller.walletDelete)
 }

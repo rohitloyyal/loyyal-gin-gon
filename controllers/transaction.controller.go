@@ -37,6 +37,7 @@ type TransactionInput struct {
 var (
 	ERR_INVALID_WALLET                  = errors.New("error: invalid wallet provided")
 	ERR_AMOUNT_NEGATIVE_OR_ZERO         = errors.New("error: amount can not be empty or zero")
+	ERR_SAME_FROM_AND_TO                = errors.New("error: from and to can not be same address")
 	ERR_INSUFICIENT_BALANCE             = errors.New("error: insuffient balance")
 	ERR_INVALID_TRANSACTION_ID_PROVIDED = errors.New("error: invalid transaction id provided")
 )
@@ -62,6 +63,11 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 
 	if input.Amount <= 0 {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got :%d ", input.Amount))
+		return
+	}
+
+	if input.From == input.To {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
 		return
 	}
 
@@ -122,6 +128,11 @@ func (controller *TransactionController) redeem(ctx *gin.Context) {
 		return
 	}
 
+	if input.From == input.To {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
+		return
+	}
+
 	// check if From is valid
 	walletFrom, err := controller.WalletService.Get(input.From)
 	if common.IsStructEmpty(walletFrom) {
@@ -175,6 +186,11 @@ func (controller *TransactionController) transfer(ctx *gin.Context) {
 
 	if input.Amount <= 0 {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got :%d ", input.Amount))
+		return
+	}
+
+	if input.From == input.To {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
 		return
 	}
 

@@ -108,7 +108,7 @@ func init() {
 
 	authController = controllers.NewAuthController(identityService)
 	identityController = controllers.NewIdentityController(logger, identityService, walletService)
-	walletController = controllers.NewWallet(walletService, queueService)
+	walletController = controllers.NewWallet(walletService, transactionService, queueService)
 	transactionController = controllers.NewTransactionController(logger, transactionService, contractService, walletService, queueService)
 	contractController = controllers.NewContractController(contractService)
 

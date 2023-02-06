@@ -12,9 +12,11 @@ nats
 custom filter based on fields, search query, ordere by, limit, etc.
 standardise reponse using custom err/response using response header and logging
 COUCHBASE SDK
---------- HERE WE ARE ------------
-timezone in front end and backend
 select only where isdelte is false
+--------- HERE WE ARE ------------
+adding autorization in the endpoints
+timezone in front end and backend
+
 capture sessioned id
 storing time in UTC format as 2023-01-24T16:52:14.90887+00:00
 standardise error handling and loggin using a wrapper

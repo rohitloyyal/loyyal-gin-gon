@@ -61,7 +61,7 @@ type Transaction struct {
 	Metadata json.RawMessage `json:"metadata"`
 
 	// Remarks (system generated remarks only)
-	Remakrs string `json:"remarks"`
+	Remarks string `json:"remarks"`
 
 	// Error is the recorded chaincode error result if any.
 	Error string `json:"errmsg"`

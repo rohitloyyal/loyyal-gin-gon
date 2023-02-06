@@ -87,6 +87,31 @@ func (service *WalletService) Get(walletId string) (models.Wallet, error) {
 
 }
 
+func (service *WalletService) Update(walletId string, sessionedUser string, updatedStatus string) error {
+	col := service.bucket.DefaultCollection()
+	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
+	if doc == nil {
+		if err != nil {
+			return errors.New("error: no wallet found")
+		}
+	}
+
+	var wallet models.Wallet
+	err = doc.Content(&wallet)
+	if err != nil {
+		return err
+	}
+
+	wallet.Status = updatedStatus
+	wallet.LastUpdatedAt = time.Now()
+	wallet.LastUpdatedBy = sessionedUser
+
+	// TODO: need to convert it into soft delete
+	_, err = col.Replace(wallet_prefix+"/"+walletId, wallet, nil)
+	return err
+
+}
+
 func (service *WalletService) Delete(walletId string, sessionedUser string) error {
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
@@ -139,7 +164,7 @@ Implemented for the linked wallets only
 func (service *WalletService) CustomFilterQuery(selector string, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
-	query := "select "+selector+" from `testbucket` where type='wallet' "
+	query := "select " + selector + " from `testbucket` where type='wallet' "
 	query += queryString
 	query += " order by " + sortBy
 	if limit != -1 {

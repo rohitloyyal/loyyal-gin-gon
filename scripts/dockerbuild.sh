@@ -13,7 +13,8 @@ set -ex
 # by prefacing the make command with GO111MODULE=off
 cd $(dirname ${0})/..
 
-[[ -n $VERSION ]] || VERSION=$(git describe --tags 2>/dev/null || echo dev(git rev-parse --short HEAD))
+#[[ -n $VERSION ]] || VERSION=$(git describe --tags 2>/dev/null || echo dev(git rev-parse --short HEAD))
+VERSION=4.0.5
 
 DIR=$1
 [[ -d $DIR ]] || fail "directory '$DIR' not specified or does not exist"
@@ -29,3 +30,10 @@ docker build -t 827830277284.dkr.ecr.me-south-1.amazonaws.com/$FILE:$VERSION -f 
 docker push 827830277284.dkr.ecr.me-south-1.amazonaws.com/$FILE:$VERSION
 # cleanup
 rm $DIR/$FILE
+
+
+##
+# docker build -t 827830277284.dkr.ecr.me-south-1.amazonaws.com/api:4.0.5 -f cmd/api/Dockerfile  .
+# aws ecr get-login-password --region me-south-1 | docker login --username AWS --password-stdin 827830277284.dkr.ecr.me-south-1.amazonaws.com
+# docker push 827830277284.dkr.ecr.me-south-1.amazonaws.com/api:4.0.5
+## 

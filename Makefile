@@ -17,14 +17,13 @@ clean:
 purge:
 	@docker rmi -f `docker images | grep "827830277284.dkr.ecr.me-south-1.amazonaws.com" | cut -d ' ' -f 1 2>/dev/null` || true
 
-build:
-	buildapi cashier retry
+build: buildapi
 
 buildapi:
 	@echo "Building api ..."
 	@./scripts/dockerbuild.sh ./cmd/api
-	@echo "Building callback ..."
-	@./scripts/dockerbuild.sh ./cmd/callback
+	# @echo "Building callback ..."
+	# @./scripts/dockerbuild.sh ./cmd/callback
 
 cashier: certs
 	@echo "Building cashier ..."

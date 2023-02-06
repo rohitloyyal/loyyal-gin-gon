@@ -30,12 +30,21 @@ func NewIdentity(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context
 }
 
 func (service *IdentityService) CreateBootstrapIdentity(username string, password string) error {
+	existingAdmin, err := service.Filter("and username=$username and identityType=$identityType", map[string]interface{}{
+		"username": username,
+		"identityType": "admin",
+	}, "createdAt", -1)
+
+	if len(existingAdmin) > 0 {
+		return nil
+	}
+
 	var identity models.Identity
 	identity.Username = username
 	identity.Password = password
 	identity.IdentityType = "admin"
 
-	_, err := service.Create(&identity)
+	_, err = service.Create(&identity)
 	return err
 }
 
