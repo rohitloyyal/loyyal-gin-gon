@@ -9,23 +9,32 @@ import (
 	"github.com/couchbase/gocb/v2"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type ContractService struct {
 	cluster *gocb.Cluster
 	bucket  *gocb.Bucket
-	ctx     context.Context
 }
 
 const (
 	contract_prefix = "contract"
 )
 
-func NewContract(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) ContractService {
-	return ContractService{cluster: cluster, bucket: bucket, ctx: ctx}
+func NewContract(cluster *gocb.Cluster, bucket *gocb.Bucket) ContractService {
+	return ContractService{cluster: cluster, bucket: bucket}
 }
 
-func (service *ContractService) CreateContract(contract *models.Contract, creator string, channel string) (string, error) {
+func (service *ContractService) CreateContract(ctx context.Context, contract *models.Contract, creator string, channel string) (string, error) {
+	fName := "service/contract/create"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+
 	col := service.bucket.DefaultCollection()
 	contract.DocType = "contract"
 	contract.Identifier = common.GenerateIdentifier(30)
@@ -33,16 +42,22 @@ func (service *ContractService) CreateContract(contract *models.Contract, creato
 	contract.Creator = creator
 	contract.Channel = channel
 	contract.Status = "active"
-	contract.CreatedAt = time.Now()
-	contract.LastUpdatedAt = time.Now()
+	contract.CreatedAt = now
+	contract.LastUpdatedAt = now
 	contract.LastUpdatedBy = contract.Creator
 	_, err := col.Insert(contract_prefix+"/"+contract.Identifier, contract, nil)
 
+	span.AddEvent("contract created")
 	return contract.Identifier, err
 
 }
 
-func (service *ContractService) GetContract(contractId string) (any, error) {
+func (service *ContractService) GetContract(ctx context.Context, contractId string) (any, error) {
+	fName := "service/contract/get"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(contract_prefix+"/"+contractId, nil)
 	if doc == nil {
@@ -54,7 +69,12 @@ func (service *ContractService) GetContract(contractId string) (any, error) {
 
 }
 
-func (service *ContractService) DeleteContract(contractId string, sessionedUser string) error {
+func (service *ContractService) DeleteContract(ctx context.Context, contractId string, sessionedUser string) error {
+	fName := "service/contract/delete"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(contract_prefix+"/"+contractId, nil)
 	if doc == nil {
@@ -70,7 +90,9 @@ func (service *ContractService) DeleteContract(contractId string, sessionedUser 
 	}
 
 	wallet.IsDeleted = true
-	wallet.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+	wallet.LastUpdatedAt = now
 	wallet.LastUpdatedBy = sessionedUser
 
 	// TODO: need to convert it into soft delete
@@ -79,7 +101,12 @@ func (service *ContractService) DeleteContract(contractId string, sessionedUser 
 
 }
 
-func (service *ContractService) MarkContractAsExpired(contractId string, sessionedUser string) error {
+func (service *ContractService) MarkContractAsExpired(ctx context.Context, contractId string, sessionedUser string) error {
+	fName := "service/contract/markContractAsExpired"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(contract_prefix+"/"+contractId, nil)
 	if doc == nil {
@@ -95,7 +122,9 @@ func (service *ContractService) MarkContractAsExpired(contractId string, session
 	}
 
 	wallet.Status = EXPIRED
-	wallet.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+	wallet.LastUpdatedAt = now
 	wallet.LastUpdatedBy = sessionedUser
 
 	// TODO: need to convert it into soft delete
@@ -104,7 +133,11 @@ func (service *ContractService) MarkContractAsExpired(contractId string, session
 
 }
 
-func (service *ContractService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Contract, error) {
+func (service *ContractService) Filter(ctx context.Context, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Contract, error) {
+	fName := "service/contract/filter"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
 	query := "select data.* from `testbucket`.`_default`.`_default` data where type='contract' "
@@ -114,6 +147,7 @@ func (service *ContractService) Filter(queryString string, params map[string]int
 		query += " limit " + strconv.Itoa(limit)
 	}
 
+	span.SetAttributes(attribute.String("query", query))
 	rows, err := service.cluster.Query(
 		query,
 		&gocb.QueryOptions{NamedParameters: params})

@@ -9,23 +9,31 @@ import (
 	"github.com/couchbase/gocb/v2"
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type TransactionService struct {
 	cluster *gocb.Cluster
 	bucket  *gocb.Bucket
-	ctx     context.Context
 }
 
 const (
 	transaction_prefix = "tx"
 )
 
-func NewTransaction(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) TransactionService {
-	return TransactionService{cluster: cluster, bucket: bucket, ctx: ctx}
+func NewTransaction(cluster *gocb.Cluster, bucket *gocb.Bucket) TransactionService {
+	return TransactionService{cluster: cluster, bucket: bucket}
 }
 
-func (service *TransactionService) Create(transaction *models.Transaction) error {
+func (service *TransactionService) Create(ctx context.Context, transaction *models.Transaction) error {
+	fName := "service/transaction/create"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
+	span.AddEvent("creating transaction")
+
 	transaction.DocType = "tx"
 	transaction.Channel = "loyyalchannel"
 	transaction.Creator = "admin"
@@ -42,36 +50,18 @@ func (service *TransactionService) Create(transaction *models.Transaction) error
 
 	col := service.bucket.DefaultCollection()
 	_, err = col.Insert(transaction_prefix+"/"+transaction.ExtID, transaction, nil)
+	span.AddEvent("added transaction to couchbase")
+
 	return err
 
 }
 
-func (service *TransactionService) Delete(txId string, sessionedUser string) error {
-	col := service.bucket.DefaultCollection()
-	doc, err := col.Get(transaction_prefix+"/"+txId, nil)
-	if doc == nil {
-		if err != nil {
-			return errors.New("error: no wallet found")
-		}
-	}
+func (service *TransactionService) Get(ctx context.Context, transactionId string) (any, error) {
+	fName := "service/transaction/get"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
 
-	var transaction models.Transaction
-	err = doc.Content(&transaction)
-	if err != nil {
-		return err
-	}
-
-	// transaction.IsDeleted = true
-	// transaction.LastUpdatedAt = time.Now()
-	// transaction.LastUpdatedBy = sessionedUser
-
-	// TODO: need to convert it into soft delete
-	_, err = col.Replace(transaction_prefix+"/"+txId, transaction, nil)
-	return err
-
-}
-
-func (service *TransactionService) Get(transactionId string) (any, error) {
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(transaction_prefix+"/"+transactionId, nil)
 	if doc == nil {
@@ -89,7 +79,11 @@ func (service *TransactionService) Get(transactionId string) (any, error) {
 
 }
 
-func (service *TransactionService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Transaction, error) {
+func (service *TransactionService) Filter(ctx context.Context, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Transaction, error) {
+	fName := "service/transaction/create"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
 	query := "select data.* from `testbucket`.`_default`.`_default` data where type='tx' "
@@ -99,6 +93,7 @@ func (service *TransactionService) Filter(queryString string, params map[string]
 		query += " limit " + strconv.Itoa(limit)
 	}
 
+	span.SetAttributes(attribute.String("query", query))
 	rows, err := service.cluster.Query(
 		query,
 		&gocb.QueryOptions{NamedParameters: params})

@@ -12,6 +12,7 @@ import (
 	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
+	"go.opentelemetry.io/otel"
 )
 
 type WalletController struct {
@@ -44,6 +45,10 @@ type WalletMergeRequest struct {
 
 func (controller *WalletController) walletCreate(ctx *gin.Context) {
 	fName := "controller/wallet/create"
+	tracer := otel.Tracer("walleCreate")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var request WalletCreateRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invlaid request body provided", fmt.Sprintf("got :%d ", err))
@@ -55,7 +60,7 @@ func (controller *WalletController) walletCreate(ctx *gin.Context) {
 	wallet.Metadata = request.Metadata
 	wallet.WalletType = request.WalletType
 
-	err := controller.WalletService.Create(&wallet, request.LinkedTo, request.PreLoadValue)
+	err := controller.WalletService.Create(ctx.Request.Context(), &wallet, request.LinkedTo, request.PreLoadValue)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error while creating wallet", fmt.Sprintf("got :%d ", err))
 		return
@@ -73,7 +78,11 @@ func (controller *WalletController) walletCreate(ctx *gin.Context) {
 }
 
 func (controller *WalletController) walletMerge(ctx *gin.Context) {
-	fName := "controller/wallet/merge"
+	fName := "controllers/wallet/merge"
+	tracer := otel.Tracer("walleMerge")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var request WalletMergeRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%d ", err))
@@ -85,7 +94,7 @@ func (controller *WalletController) walletMerge(ctx *gin.Context) {
 		return
 	}
 
-	toWallet, err := controller.WalletService.Get(request.To)
+	toWallet, err := controller.WalletService.Get(ctx.Request.Context(), request.To)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
 		return
@@ -98,7 +107,7 @@ func (controller *WalletController) walletMerge(ctx *gin.Context) {
 
 	// recursively, get all FROM wallet and transfer their balance to TO wallet
 	for _, walletIdentifier := range request.From {
-		wallet, err := controller.WalletService.Get(walletIdentifier)
+		wallet, err := controller.WalletService.Get(ctx.Request.Context(), walletIdentifier)
 		if err != nil {
 			common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%d ", err))
 			return
@@ -118,7 +127,7 @@ func (controller *WalletController) walletMerge(ctx *gin.Context) {
 		transaction.TransactionType = "merge"
 		transaction.Remarks = "merged into the wallet " + toWallet.Identifier
 
-		err = controller.TransactionService.Create(&transaction)
+		err = controller.TransactionService.Create(ctx.Request.Context(), &transaction)
 		if err != nil {
 			common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
 			return
@@ -129,7 +138,7 @@ func (controller *WalletController) walletMerge(ctx *gin.Context) {
 		go controller.publishTxToNats(ctx.Request.Context(), &transaction)
 
 		// markging wallet as disabled
-		controller.WalletService.Update(wallet.Identifier, "admin", "disabled")
+		controller.WalletService.Update(ctx.Request.Context(), wallet.Identifier, "admin", "disabled")
 
 	}
 	common.PrepareCustomResponse(ctx, "wallet merged", nil)
@@ -137,13 +146,17 @@ func (controller *WalletController) walletMerge(ctx *gin.Context) {
 
 func (controller *WalletController) walletGet(ctx *gin.Context) {
 	fName := "controller/wallet/get"
+	tracer := otel.Tracer("walletGet")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	walletId := ctx.Query("walletId")
 	if walletId == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: wallet id is required", fmt.Sprintf("got :%s ", walletId))
 		return
 	}
 
-	wallet, err := controller.WalletService.Get(walletId)
+	wallet, err := controller.WalletService.Get(ctx.Request.Context(), walletId)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -154,6 +167,10 @@ func (controller *WalletController) walletGet(ctx *gin.Context) {
 
 func (controller *WalletController) walletDelete(ctx *gin.Context) {
 	fName := "controller/wallet/delete"
+	tracer := otel.Tracer("walletDelete")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var wallet models.Wallet
 	if err := ctx.ShouldBindJSON(&wallet); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request payload provided", fmt.Sprintf("got :%s ", err))
@@ -168,7 +185,7 @@ func (controller *WalletController) walletDelete(ctx *gin.Context) {
 		return
 	}
 
-	err := controller.WalletService.Delete(wallet.Identifier, "admin")
+	err := controller.WalletService.Delete(ctx.Request.Context(), wallet.Identifier, "admin")
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -179,7 +196,11 @@ func (controller *WalletController) walletDelete(ctx *gin.Context) {
 
 func (controller *WalletController) walletFilter(ctx *gin.Context) {
 	fName := "controller/wallet/filter"
-	transactions, err := controller.WalletService.Filter("AND isDeleted=false", map[string]interface{}{}, "createdAt", -1)
+	tracer := otel.Tracer("walletFilter")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
+	transactions, err := controller.WalletService.Filter(ctx.Request.Context(), "AND isDeleted=false", map[string]interface{}{}, "createdAt", -1)
 
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))

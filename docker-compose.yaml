@@ -1,0 +1,52 @@
+version: '3.7'
+
+volumes:
+    db_data: 
+services:
+
+  nats:
+    image: nats:latest
+    ports:
+      - 4222:4222
+      - 8222:8222
+      - 6222:6222
+    restart: always
+    container_name: gnats.loyyal.com
+    
+  couch:
+    image: couchbase:latest
+    container_name: couch.loyyal.com
+    environment:
+      - USER=admin
+      - PASS=3M9Oh4Hq1qE
+      - BUCKET=testbucket
+      - FAB_READY_FILE=/opt/var/.couchready
+    command: /config.sh
+    ports:
+      - 8091:8091
+      - 8092:8092
+      - 8093:8093
+      - 8094:8094
+      - 11210:11210
+    restart: always
+    volumes:
+      - ./share/:/opt/var
+      - ./cmd/couchlocal/config.sh:/config.sh
+      - db_data:/opt/couchbase/var
+  
+  jaeger1:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger1.loyyal.com
+    environment:
+      - COLLECTOR_ZIPKIN_HTTP_PORT=9411
+    ports:
+      - 5775:5775/udp
+      - 6831:6831/udp
+      - 6832:6832/udp
+      - 5778:5778
+      - 16686:16686
+      - 14268:14268
+      - 9411:9411
+    restart: always
+
+  

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -14,6 +15,14 @@ import (
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel"
+
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
 
 var (
@@ -100,11 +109,11 @@ func init() {
 	logger.Println("nats connection established")
 
 	// controller and service
-	authService = services.NewAuthService(cluster, bucket, ctx)
-	identityService = services.NewIdentity(cluster, bucket, ctx)
-	walletService = services.NewWallet(cluster, bucket, ctx)
-	transactionService = services.NewTransaction(cluster, bucket, ctx)
-	contractService = services.NewContract(cluster, bucket, ctx)
+	authService = services.NewAuthService(cluster, bucket)
+	identityService = services.NewIdentity(cluster, bucket)
+	walletService = services.NewWallet(cluster, bucket)
+	transactionService = services.NewTransaction(cluster, bucket)
+	contractService = services.NewContract(cluster, bucket)
 
 	authController = controllers.NewAuthController(identityService)
 	identityController = controllers.NewIdentityController(logger, identityService, walletService)
@@ -113,19 +122,51 @@ func init() {
 	contractController = controllers.NewContractController(contractService)
 
 	// create bootstrap identity
-	err = identityService.CreateBootstrapIdentity(bootstrap_username, bootstrap_password)
+	err = identityService.CreateBootstrapIdentity(ctx, bootstrap_username, bootstrap_password)
 	if err != nil {
 		logger.Fatalf("bootstrap errors: %v", err)
 	}
 	logger.Println("admin identity bootstraped")
+
+	// tracing
+	tp, err := JaegerTraceProvider()
+	if err != nil {
+		logger.Fatalf("tracing errors: %v", err)
+	}
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+
+	// initialising server
 	server = gin.Default()
 }
 
+func JaegerTraceProvider() (*sdktrace.TracerProvider, error) {
+	jaeger_agent_addr := os.Getenv("JAEGER_COLLECTION_URL")
+	if jaeger_agent_addr == "" {
+		return nil, errors.New("no tracing collection endpoint given")
+	}
+	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(jaeger_agent_addr + "/api/traces")))
+	if err != nil {
+		return nil, err
+	}
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(service),
+			semconv.DeploymentEnvironmentKey.String(version),
+		)),
+	)
+	return tp, nil
+
+}
 func main() {
 	logger.Println("starting...")
 	defer cluster.Close(nil)
 
 	server.Use(middleware.CORSMiddleware())
+	server.Use(otelgin.Middleware("api"))
 
 	basepath := server.Group("/v1")
 	commonController.CommonRoutes(basepath)

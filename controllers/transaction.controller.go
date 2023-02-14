@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,9 @@ import (
 	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type TransactionController struct {
@@ -54,7 +58,11 @@ func NewTransactionController(logger *log.Logger, transactionService services.Tr
 }
 
 func (controller *TransactionController) issue(ctx *gin.Context) {
-	fName := "transactioncontrller/issue"
+	fName := "controller/transaction/issue"
+	tracer := otel.Tracer("issue")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var input TransactionInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", err))
@@ -71,8 +79,13 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 		return
 	}
 
+	span.SetAttributes(attribute.String("From", input.From))
+	span.SetAttributes(attribute.String("To", input.To))
+	span.SetAttributes(attribute.Int64("Amount", input.Amount))
+	span.SetAttributes(attribute.String("Transaction Type", "issue"))
+
 	// check if From is valid
-	walletFrom, err := controller.WalletService.Get(input.From)
+	walletFrom, err := controller.WalletService.Get(ctx.Request.Context(), input.From)
 	if common.IsStructEmpty(walletFrom) {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
@@ -84,7 +97,7 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 	}
 
 	// check if To is valid
-	walletTo, err := controller.WalletService.Get(input.To)
+	walletTo, err := controller.WalletService.Get(ctx.Request.Context(), input.To)
 	if common.IsStructEmpty(walletTo) {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
@@ -101,14 +114,14 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 	transaction.Metadata = input.Metadata
 	transaction.TransactionType = "issue"
 
-	err = controller.TransactionService.Create(&transaction)
+	err = controller.TransactionService.Create(ctx.Request.Context(), &transaction)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
 		return
 	}
-
+	span.AddEvent("transaction created to database")
 	// publishing to nats
-	go controller.ApplyBusinessContractAndPublishToNats(ctx, &transaction)
+	go controller.ApplyBusinessContractAndPublishToNats(ctx.Request.Context(), &transaction)
 
 	common.PrepareCustomResponse(ctx, "points issued", struct {
 		Identifier string `json:"identifier"`
@@ -117,11 +130,21 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 
 func (controller *TransactionController) redeem(ctx *gin.Context) {
 	fName := "transactioncontrller/redeem"
+	tracer := otel.Tracer("redeem")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var input TransactionInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", err))
+
 		return
 	}
+
+	span.SetAttributes(attribute.String("From", input.From))
+	span.SetAttributes(attribute.String("To", input.To))
+	span.SetAttributes(attribute.Int64("Amount", input.Amount))
+	span.SetAttributes(attribute.String("Transaction Type", "redeem"))
 
 	if input.Amount <= 0 {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got :%d ", input.Amount))
@@ -134,7 +157,7 @@ func (controller *TransactionController) redeem(ctx *gin.Context) {
 	}
 
 	// check if From is valid
-	walletFrom, err := controller.WalletService.Get(input.From)
+	walletFrom, err := controller.WalletService.Get(ctx.Request.Context(), input.From)
 	if common.IsStructEmpty(walletFrom) {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
@@ -146,7 +169,7 @@ func (controller *TransactionController) redeem(ctx *gin.Context) {
 	}
 
 	// check if To is valid
-	walletTo, err := controller.WalletService.Get(input.To)
+	walletTo, err := controller.WalletService.Get(ctx.Request.Context(), input.To)
 	if common.IsStructEmpty(walletTo) {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
@@ -163,14 +186,15 @@ func (controller *TransactionController) redeem(ctx *gin.Context) {
 	transaction.Metadata = input.Metadata
 	transaction.TransactionType = "redeem"
 
-	err = controller.TransactionService.Create(&transaction)
+	err = controller.TransactionService.Create(ctx.Request.Context(), &transaction)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
 		return
 	}
+	span.AddEvent("transaction created to database")
 
 	// publishing to nats
-	go controller.publishTransactionToNats(ctx.Request.Context(), &transaction)
+	go controller.ApplyBusinessContractAndPublishToNats(ctx.Request.Context(), &transaction)
 	common.PrepareCustomResponse(ctx, "points redeemed", struct {
 		Identifier string `json:"identifier"`
 	}{Identifier: transaction.ExtID})
@@ -178,6 +202,10 @@ func (controller *TransactionController) redeem(ctx *gin.Context) {
 
 func (controller *TransactionController) transfer(ctx *gin.Context) {
 	fName := "transactioncontrller/transfer"
+	tracer := otel.Tracer("transfer")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var input TransactionInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", err))
@@ -195,7 +223,7 @@ func (controller *TransactionController) transfer(ctx *gin.Context) {
 	}
 
 	// check if From is valid
-	walletFrom, err := controller.WalletService.Get(input.From)
+	walletFrom, err := controller.WalletService.Get(ctx.Request.Context(), input.From)
 	if common.IsStructEmpty(walletFrom) {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
@@ -207,7 +235,7 @@ func (controller *TransactionController) transfer(ctx *gin.Context) {
 	}
 
 	// check if To is valid
-	walletTo, err := controller.WalletService.Get(input.To)
+	walletTo, err := controller.WalletService.Get(ctx.Request.Context(), input.To)
 	if common.IsStructEmpty(walletTo) {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
@@ -224,14 +252,14 @@ func (controller *TransactionController) transfer(ctx *gin.Context) {
 	transaction.Metadata = input.Metadata
 	transaction.TransactionType = "transfer"
 
-	err = controller.TransactionService.Create(&transaction)
+	err = controller.TransactionService.Create(ctx.Request.Context(), &transaction)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%v ", err))
 		return
 	}
 
 	// publishing to nats
-	go controller.ApplyBusinessContractAndPublishToNats(ctx, &transaction)
+	go controller.publishTransactionToNats(ctx, &transaction)
 	common.PrepareCustomResponse(ctx, "points transferred", struct {
 		Identifier string `json:"identifier"`
 	}{Identifier: transaction.ExtID})
@@ -246,6 +274,11 @@ func (controller *TransactionController) withdraw(ctx *gin.Context) {
 }
 
 func (controller *TransactionController) TransactionGet(ctx *gin.Context) {
+	fName := "transactioncontrller/get"
+	tracer := otel.Tracer("TransactionGet")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	transactionId := ctx.Query("transactionId")
 	if transactionId == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -254,7 +287,7 @@ func (controller *TransactionController) TransactionGet(ctx *gin.Context) {
 		return
 	}
 
-	transaction, err := controller.TransactionService.Get(transactionId)
+	transaction, err := controller.TransactionService.Get(ctx.Request.Context(), transactionId)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": err.Error(),
@@ -269,13 +302,15 @@ func (controller *TransactionController) TransactionGet(ctx *gin.Context) {
 }
 
 func (controller *TransactionController) TransactionFilter(ctx *gin.Context) {
+	fName := "transactioncontrller/filter"
+	tracer := otel.Tracer("TransactionFilter")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
 
-	results, err := controller.TransactionService.Filter("", map[string]interface{}{}, "createdAt", -1)
+	results, err := controller.TransactionService.Filter(ctx.Request.Context(), "", map[string]interface{}{}, "createdAt", -1)
 
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": err.Error(),
-		})
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: no transaction found", fmt.Sprintf("%s", err))
 		return
 	}
 
@@ -306,17 +341,21 @@ func (controller *TransactionController) TransactionFilter(ctx *gin.Context) {
 
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "success",
-		"body":    transactions,
-	})
+	common.PrepareCustomResponse(ctx, "transaction filtered", transactions)
 }
 
-func (controller *TransactionController) ApplyBusinessContractAndPublishToNats(ctx *gin.Context, transaction *models.Transaction) {
-	contracts, err := controller.ContractService.Filter("AND isDeleted=false", map[string]interface{}{}, "createdAt", -1)
+func (controller *TransactionController) ApplyBusinessContractAndPublishToNats(ctx context.Context, transaction *models.Transaction) {
+	fName := "controller/transaction/applyBusinessContractAndPublishToNats"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
+	contracts, err := controller.ContractService.Filter(ctx, "AND isDeleted=false", map[string]interface{}{}, "createdAt", -1)
 	if err != nil {
 		controller.logger.Println("failed to query the contract for dynamic application: %w", err)
 	}
+
+	span.AddEvent("filtered " + strconv.Itoa(len(contracts)) + "contracts from the database")
 
 	location, _ := time.LoadLocation("UTC")
 	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
@@ -358,16 +397,30 @@ func (controller *TransactionController) ApplyBusinessContractAndPublishToNats(c
 			}
 
 			// apply contract
-			transaction.Amount = transaction.Amount * applicableContract.BurnConversionRatio
-			transaction.AppliedContract = applicableContract.Identifier
+			if transaction.TransactionType == "issue" {
+				span.AddEvent("applying " + strconv.Itoa(int(applicableContract.EarnConversionRatio)) + "as earn rate to the transaction")
+				transaction.Amount = transaction.Amount * applicableContract.EarnConversionRatio
+				transaction.AppliedContract = applicableContract.Identifier
+			}
+			if transaction.TransactionType == "redeem" {
+				span.AddEvent("applying " + strconv.Itoa(int(applicableContract.BurnConversionRatio)) + "as burn rate to the transaction")
+				transaction.Amount = transaction.Amount * applicableContract.BurnConversionRatio
+				transaction.AppliedContract = applicableContract.Identifier
+			}
+
 		}
 
 	}
-	controller.publishTransactionToNats(ctx.Request.Context(), transaction)
+	controller.publishTransactionToNats(ctx, transaction)
 
 }
 
 func (controller *TransactionController) publishTransactionToNats(ctx context.Context, transaction *models.Transaction) {
+	fName := "controller/transaction/publishTransactionToNats"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
 	var request nats.TopicEncoder
 	request = &models.TransferRequest{
 		RefID:   transaction.RefID,
@@ -389,7 +442,10 @@ func (controller *TransactionController) publishTransactionToNats(ctx context.Co
 	}
 	if err := controller.Nats.Publish(ctx, request); err != nil {
 		controller.logger.Println("failed to write wallet to NATS (failing over to retry service): %w", err)
+		span.AddEvent("failed to write wallet to NATS")
+		span.SetStatus(codes.Error, "failed to write wallet to NATS")
 	}
+	span.AddEvent("published to NATS ")
 }
 
 func (controller *TransactionController) TransactionRoutes(group *gin.RouterGroup) {

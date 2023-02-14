@@ -3,11 +3,14 @@ package common
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func GenerateIdentifier(length int) string {
@@ -74,6 +77,11 @@ func randomID() (string, error) {
 }
 
 func PrepareCustomError(ctx *gin.Context, errorCode int, functionName string, displayMessage string, details string) {
+	fName := "utils/PrepareCustomError"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	errID, err := randomID()
 	if err != nil {
 		errID = "unknown(" + err.Error() + ")"
@@ -81,6 +89,9 @@ func PrepareCustomError(ctx *gin.Context, errorCode int, functionName string, di
 
 	ctx.Header("X-ErrID", errID)
 	fmt.Printf("api error id=%q,path=%q,function name= %s,code=%d,err=%q,detail=%q", errID, ctx.Request.URL, functionName, errorCode, displayMessage, details)
+
+	span.RecordError(errors.New(fmt.Sprintf("api error id=%q,path=%q,function name= %s,code=%d,err=%q,detail=%q", errID, ctx.Request.URL, functionName, errorCode, displayMessage, details)))
+	span.SetStatus(codes.Error, details)
 
 	ctx.JSON(errorCode, gin.H{
 		"code":    http.StatusBadRequest,
@@ -91,6 +102,12 @@ func PrepareCustomError(ctx *gin.Context, errorCode int, functionName string, di
 }
 
 func PrepareCustomResponse(ctx *gin.Context, displayMessage string, body any) {
+	fName := "utils/PrepareCustomResponse"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
+	span.SetStatus(codes.Ok, "")
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    http.StatusOK,
 		"message": displayMessage,

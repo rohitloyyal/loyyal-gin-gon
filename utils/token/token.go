@@ -9,6 +9,7 @@ import (
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"go.opencensus.io/trace"
 )
 
 func GenerateToken(email string, role string, name string) (string, error) {
@@ -23,7 +24,9 @@ func GenerateToken(email string, role string, name string) (string, error) {
 	claims["sub"] = email
 	claims["name"] = name
 	claims["aud"] = role
-	claims["exp"] = time.Now().Add(time.Hour * time.Duration(token_expiry)).Unix()
+
+	location, _ := time.LoadLocation("UTC")
+	claims["exp"] = time.Now().In(location).Add(time.Hour * time.Duration(token_expiry)).Unix()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET_KEY")))
@@ -31,8 +34,11 @@ func GenerateToken(email string, role string, name string) (string, error) {
 }
 
 func TokenValid(c *gin.Context) error {
+	_, sp := trace.StartSpan(c, "api/v4/userSession")
+	defer sp.End()
+	
 	tokenString := ExtractToken(c)
-	_, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
@@ -40,6 +46,24 @@ func TokenValid(c *gin.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if ok && token.Valid {
+		username := fmt.Sprintf("%s", claims["sub"])
+		role := fmt.Sprintf("%s", claims["aud"])
+
+		sp.AddAttributes(
+			trace.StringAttribute("token.username", username),
+			trace.StringAttribute("token.role", role),
+		)
+
+		c.Header("X-API-USER-ID", username)
+		c.Header("X-API-USER-Role", role)
+		// TODO: need to make channel dynamic from the token
+		c.Header("X-API-CHANNEL", "loyyalchannel")
+
+		return nil
 	}
 	return nil
 }

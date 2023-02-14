@@ -8,6 +8,7 @@ import (
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/services"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
+	"go.opentelemetry.io/otel"
 )
 
 type AuthController struct {
@@ -27,6 +28,10 @@ func NewAuthController(service services.IdentityService) AuthController {
 
 func (controller *AuthController) Login(ctx *gin.Context) {
 	fName := "controllers/authController/login"
+	tracer := otel.Tracer("Login")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var input RegisterInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request body provided", fmt.Sprintf("got :%s ", input))
@@ -37,7 +42,7 @@ func (controller *AuthController) Login(ctx *gin.Context) {
 	user.Username = input.Username
 	user.Password = input.Password
 
-	token, err := controller.IdentityService.Login(&user)
+	token, err := controller.IdentityService.Login(ctx.Request.Context(), &user)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return

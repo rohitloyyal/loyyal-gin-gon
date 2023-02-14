@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"html"
 	"strings"
 
@@ -13,11 +12,10 @@ import (
 type AuthService struct {
 	cluster *gocb.Cluster
 	bucket  *gocb.Bucket
-	ctx     context.Context
 }
 
-func NewAuthService(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) AuthService {
-	return AuthService{cluster: cluster, bucket: bucket, ctx: ctx}
+func NewAuthService(cluster *gocb.Cluster, bucket *gocb.Bucket) AuthService {
+	return AuthService{cluster: cluster, bucket: bucket}
 }
 
 func (service *AuthService) Register(user *models.User) error {

@@ -12,26 +12,27 @@ import (
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
 	"github.com/loyyal/loyyal-be-contract/utils/token"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type IdentityService struct {
 	cluster *gocb.Cluster
 	bucket  *gocb.Bucket
-	ctx     context.Context
 }
 
 const (
 	identity_prefix = "user"
 )
 
-func NewIdentity(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) IdentityService {
-	return IdentityService{cluster: cluster, bucket: bucket, ctx: ctx}
+func NewIdentity(cluster *gocb.Cluster, bucket *gocb.Bucket) IdentityService {
+	return IdentityService{cluster: cluster, bucket: bucket}
 }
 
-func (service *IdentityService) CreateBootstrapIdentity(username string, password string) error {
-	existingAdmin, err := service.Filter("and username=$username and identityType=$identityType", map[string]interface{}{
-		"username": username,
+func (service *IdentityService) CreateBootstrapIdentity(ctx context.Context, username string, password string) error {
+	existingAdmin, err := service.Filter(ctx, "and username=$username and identityType=$identityType", map[string]interface{}{
+		"username":     username,
 		"identityType": "admin",
 	}, "createdAt", -1)
 
@@ -44,12 +45,17 @@ func (service *IdentityService) CreateBootstrapIdentity(username string, passwor
 	identity.Password = password
 	identity.IdentityType = "admin"
 
-	_, err = service.Create(&identity)
+	_, err = service.Create(ctx, &identity)
 	return err
 }
 
-func (service *IdentityService) Login(user *models.Identity) (string, error) {
-	identities, err := service.Filter("and username = $username and isDeleted=false", map[string]interface{}{
+func (service *IdentityService) Login(ctx context.Context, user *models.Identity) (string, error) {
+	fName := "service/identity/login"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
+	identities, err := service.Filter(ctx, "and username = $username and isDeleted=false", map[string]interface{}{
 		"username": user.Username,
 	}, "createdAt", 1)
 
@@ -85,7 +91,14 @@ func (service *IdentityService) Login(user *models.Identity) (string, error) {
 	return token, nil
 }
 
-func (service *IdentityService) Create(identity *models.Identity) (string, error) {
+func (service *IdentityService) Create(ctx context.Context, identity *models.Identity) (string, error) {
+	fName := "service/identity/create"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
+	span.AddEvent("creating user identity")
+
 	identity.DocType = "user"
 	identity.Identifier = common.GenerateIdentifier(30)
 	identity.Username = html.EscapeString(strings.TrimSpace(identity.Username))
@@ -103,18 +116,27 @@ func (service *IdentityService) Create(identity *models.Identity) (string, error
 	}
 
 	identity.Status = ACTIVE
-	identity.CreatedAt = time.Now()
-	identity.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+
+	identity.CreatedAt = now
+	identity.LastUpdatedAt = now
 	identity.LastUpdatedBy = identity.Creator
 
 	col := service.bucket.DefaultCollection()
 	_, err = col.Insert(identity_prefix+"/"+identity.Identifier, identity, nil)
 
+	span.AddEvent("created user identity to couchbase")
 	return identity.Identifier, err
 
 }
 
-func (service *IdentityService) Get(identityId string) (any, error) {
+func (service *IdentityService) Get(ctx context.Context, identityId string) (any, error) {
+	fName := "service/identity/get"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(identity_prefix+"/"+identityId, nil)
 	if doc == nil {
@@ -132,7 +154,12 @@ func (service *IdentityService) Get(identityId string) (any, error) {
 	return identity, err
 }
 
-func (service *IdentityService) Update(identityId string, personalDetails models.PersonalDetails) error {
+func (service *IdentityService) Update(ctx context.Context, identityId string, personalDetails models.PersonalDetails) error {
+	fName := "service/identity/update"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(identity_prefix+"/"+identityId, nil)
 	if doc == nil {
@@ -148,7 +175,10 @@ func (service *IdentityService) Update(identityId string, personalDetails models
 	}
 
 	identity.PersonalDetails = personalDetails
-	identity.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+
+	identity.LastUpdatedAt = now
 	identity.LastUpdatedBy = "admin"
 
 	// TODO: need to convert it into soft delete
@@ -156,7 +186,12 @@ func (service *IdentityService) Update(identityId string, personalDetails models
 	return err
 }
 
-func (service *IdentityService) Delete(identityId string, sessionedUser string) error {
+func (service *IdentityService) Delete(ctx context.Context, identityId string, sessionedUser string) error {
+	fName := "service/identity/delete"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
+
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(identity_prefix+"/"+identityId, nil)
 	if doc == nil {
@@ -172,17 +207,23 @@ func (service *IdentityService) Delete(identityId string, sessionedUser string) 
 	}
 
 	identity.IsDeleted = true
-	identity.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+	identity.LastUpdatedAt = now
 	identity.LastUpdatedBy = sessionedUser
 
 	_, err = col.Replace(identity_prefix+"/"+identityId, identity, nil)
-	// _, err := col.Remove(identity_prefix+""+identityId, nil)
+	span.AddEvent("identity updated")
 
 	return err
 
 }
 
-func (service *IdentityService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Identity, error) {
+func (service *IdentityService) Filter(ctx context.Context, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Identity, error) {
+	fName := "service/identity/filter"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
 	query := "select data.* from `testbucket`.`_default`.`_default` data where type='user' "
@@ -192,6 +233,7 @@ func (service *IdentityService) Filter(queryString string, params map[string]int
 		query += " limit " + strconv.Itoa(limit)
 	}
 
+	span.SetAttributes(attribute.String("query", query))
 	rows, err := service.cluster.Query(
 		query,
 		&gocb.QueryOptions{NamedParameters: params})

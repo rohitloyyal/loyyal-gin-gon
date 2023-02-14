@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	"go.opentelemetry.io/otel"
 
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
@@ -37,6 +38,10 @@ type DefaultWalletCreate struct {
 
 func (controller *IdentityController) identityCreate(ctx *gin.Context) {
 	fName := "identitycontroller/create"
+	tracer := otel.Tracer("identityCreate")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+
+	defer span.End()
 	var identity models.Identity
 	if err := ctx.ShouldBindBodyWith(&identity, binding.JSON); err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
@@ -72,7 +77,7 @@ func (controller *IdentityController) identityCreate(ctx *gin.Context) {
 		}
 	}
 
-	identifier, err := controller.IdentityService.Create(&identity)
+	identifier, err := controller.IdentityService.Create(ctx.Request.Context(), &identity)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -82,7 +87,7 @@ func (controller *IdentityController) identityCreate(ctx *gin.Context) {
 	var wallet models.Wallet
 	wallet.Name = defaultWallet.WalletName
 
-	err = controller.WalletService.Create(&wallet, identity.Identifier, defaultWallet.PreLoadValue)
+	err = controller.WalletService.Create(ctx.Request.Context(), &wallet, identity.Identifier, defaultWallet.PreLoadValue)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -95,13 +100,17 @@ func (controller *IdentityController) identityCreate(ctx *gin.Context) {
 
 func (controller *IdentityController) IdentityGet(ctx *gin.Context) {
 	fName := "identitycontroller/get"
+	tracer := otel.Tracer("identityGet")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	identityId := ctx.Query("identityId")
 	if identityId == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: identifier is required", fmt.Sprintf("got :%s ", identityId))
 		return
 	}
 
-	identity, err := controller.IdentityService.Get(identityId)
+	identity, err := controller.IdentityService.Get(ctx.Request.Context(), identityId)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -112,6 +121,10 @@ func (controller *IdentityController) IdentityGet(ctx *gin.Context) {
 
 func (controller *IdentityController) IdentityUpdate(ctx *gin.Context) {
 	fName := "identitycontroller/update"
+	tracer := otel.Tracer("identityUpdate")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+
+	defer span.End()
 	var identity models.Identity
 	if err := ctx.ShouldBindJSON(&identity); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -125,7 +138,7 @@ func (controller *IdentityController) IdentityUpdate(ctx *gin.Context) {
 		return
 	}
 
-	err := controller.IdentityService.Update(identity.Identifier, identity.PersonalDetails)
+	err := controller.IdentityService.Update(ctx.Request.Context(), identity.Identifier, identity.PersonalDetails)
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -140,6 +153,10 @@ func (controller *IdentityController) IdentityUpdate(ctx *gin.Context) {
 
 func (controller *IdentityController) identityDelete(ctx *gin.Context) {
 	fName := "identitycontroller/delete"
+	tracer := otel.Tracer("identityDelete")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	var identity models.Identity
 	if err := ctx.ShouldBindJSON(&identity); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -153,7 +170,7 @@ func (controller *IdentityController) identityDelete(ctx *gin.Context) {
 		return
 	}
 
-	err := controller.IdentityService.Delete(identity.Identifier, "admin")
+	err := controller.IdentityService.Delete(ctx.Request.Context(), identity.Identifier, "admin")
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
@@ -164,8 +181,12 @@ func (controller *IdentityController) identityDelete(ctx *gin.Context) {
 
 func (controller *IdentityController) identityLinkedWallets(ctx *gin.Context) {
 	fName := "identitycontroller/linkedwallets"
+	tracer := otel.Tracer("identityLinkedWallets")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+
 	userId := ctx.Query("userId")
-	wallets, err := controller.WalletService.CustomFilterQuery("identifier, name, balance, walletType, status, createdAt",
+	wallets, err := controller.WalletService.CustomFilterQuery(ctx.Request.Context(), "identifier, name, balance, walletType, status, createdAt",
 		"and isDeleted=false and any wallet in testbucket.linkedTo SATISFIES wallet == $userId end", map[string]interface{}{
 			"userId": userId,
 		}, "createdAt", -1)
@@ -179,10 +200,10 @@ func (controller *IdentityController) identityLinkedWallets(ctx *gin.Context) {
 
 func (controller *IdentityController) identityFilter(ctx *gin.Context) {
 	fName := "identitycontroller/filter"
-	// identities, err := controller.IdentityService.Filter("and walletType = $walletType", map[string]interface{}{
-	// 	"walletType": "regular_wallet",
-	// }, "createdAt", 10)
-	identities, err := controller.IdentityService.Filter("AND isDeleted=false AND identityType!='admin'", map[string]interface{}{}, "createdAt", -1)
+	tracer := otel.Tracer("identityFilter")
+	_, span := tracer.Start(ctx.Request.Context(), fName)
+	defer span.End()
+	identities, err := controller.IdentityService.Filter(ctx.Request.Context(), "AND isDeleted=false AND identityType!='admin'", map[string]interface{}{}, "createdAt", -1)
 
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))

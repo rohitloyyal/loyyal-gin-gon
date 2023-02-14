@@ -11,12 +11,13 @@ import (
 	"github.com/loyyal/loyyal-be-contract/models"
 	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type WalletService struct {
 	cluster *gocb.Cluster
 	bucket  *gocb.Bucket
-	ctx     context.Context
 }
 
 const (
@@ -30,11 +31,11 @@ const (
 	EXPIRED    = "expired"
 )
 
-func NewWallet(cluster *gocb.Cluster, bucket *gocb.Bucket, ctx context.Context) WalletService {
-	return WalletService{cluster: cluster, bucket: bucket, ctx: ctx}
+func NewWallet(cluster *gocb.Cluster, bucket *gocb.Bucket) WalletService {
+	return WalletService{cluster: cluster, bucket: bucket}
 }
 
-func (service *WalletService) Create(wallet *models.Wallet, linkedTo string, preLoadAmount int64) error {
+func (service *WalletService) Create(ctx context.Context, wallet *models.Wallet, linkedTo string, preLoadAmount int64) error {
 	wallet.Identifier = common.GenerateIdentifier(30)
 	wallet.Channel = "loyyalchannel"
 	wallet.DocType = "wallet"
@@ -45,8 +46,10 @@ func (service *WalletService) Create(wallet *models.Wallet, linkedTo string, pre
 	wallet.Creator = "admin"
 	wallet.Status = ACTIVE
 
-	wallet.CreatedAt = time.Now()
-	wallet.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+	wallet.CreatedAt = now
+	wallet.LastUpdatedAt = now
 	wallet.LastUpdatedBy = wallet.Creator
 
 	// adding this reference that will be send to blockchain
@@ -68,7 +71,7 @@ func publishWalletCreate(ctx context.Context, nats *nats.Client, wallet *models.
 	}
 }
 
-func (service *WalletService) Get(walletId string) (models.Wallet, error) {
+func (service *WalletService) Get(ctx context.Context, walletId string) (models.Wallet, error) {
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
 	if doc == nil {
@@ -87,7 +90,7 @@ func (service *WalletService) Get(walletId string) (models.Wallet, error) {
 
 }
 
-func (service *WalletService) Update(walletId string, sessionedUser string, updatedStatus string) error {
+func (service *WalletService) Update(ctx context.Context, walletId string, sessionedUser string, updatedStatus string) error {
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
 	if doc == nil {
@@ -103,7 +106,9 @@ func (service *WalletService) Update(walletId string, sessionedUser string, upda
 	}
 
 	wallet.Status = updatedStatus
-	wallet.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+	wallet.LastUpdatedAt = now
 	wallet.LastUpdatedBy = sessionedUser
 
 	// TODO: need to convert it into soft delete
@@ -112,7 +117,7 @@ func (service *WalletService) Update(walletId string, sessionedUser string, upda
 
 }
 
-func (service *WalletService) Delete(walletId string, sessionedUser string) error {
+func (service *WalletService) Delete(ctx context.Context, walletId string, sessionedUser string) error {
 	col := service.bucket.DefaultCollection()
 	doc, err := col.Get(wallet_prefix+"/"+walletId, nil)
 	if doc == nil {
@@ -128,7 +133,9 @@ func (service *WalletService) Delete(walletId string, sessionedUser string) erro
 	}
 
 	wallet.IsDeleted = true
-	wallet.LastUpdatedAt = time.Now()
+	location, _ := time.LoadLocation("UTC")
+	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
+	wallet.LastUpdatedAt = now
 	wallet.LastUpdatedBy = sessionedUser
 
 	// TODO: need to convert it into soft delete
@@ -137,7 +144,11 @@ func (service *WalletService) Delete(walletId string, sessionedUser string) erro
 
 }
 
-func (service *WalletService) Filter(queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
+func (service *WalletService) Filter(ctx context.Context, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
+	fName := "service/wallet/filter"
+	tracer := otel.Tracer("walletFilter")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
 	query := "select data.* from `testbucket` data where type='wallet' "
@@ -147,6 +158,7 @@ func (service *WalletService) Filter(queryString string, params map[string]inter
 		query += " limit " + strconv.Itoa(limit)
 	}
 
+	span.SetAttributes(attribute.String("query", query))
 	rows, err := service.cluster.Query(
 		query,
 		&gocb.QueryOptions{NamedParameters: params})
@@ -161,7 +173,11 @@ func (service *WalletService) Filter(queryString string, params map[string]inter
 /*
 Implemented for the linked wallets only
 */
-func (service *WalletService) CustomFilterQuery(selector string, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
+func (service *WalletService) CustomFilterQuery(ctx context.Context, selector string, queryString string, params map[string]interface{}, sortBy string, limit int) ([]*models.Wallet, error) {
+	fName := "service/transaction/customFilterQuery"
+	tracer := otel.Tracer("api")
+	_, span := tracer.Start(ctx, fName)
+	defer span.End()
 
 	// TODO: we can even make the retuning fields as input from calling methods insead of returning all fields
 	query := "select " + selector + " from `testbucket` where type='wallet' "
@@ -171,6 +187,7 @@ func (service *WalletService) CustomFilterQuery(selector string, queryString str
 		query += " limit " + strconv.Itoa(limit)
 	}
 
+	span.SetAttributes(attribute.String("query", query))
 	rows, err := service.cluster.Query(
 		query,
 		&gocb.QueryOptions{NamedParameters: params})
