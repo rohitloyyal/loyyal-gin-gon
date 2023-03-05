@@ -53,6 +53,17 @@ func IsStructEmpty(object interface{}) bool {
 	return false
 }
 
+func GetMemberrWalletType(identityType string) string {
+	walletType := "regular"
+	if identityType == "opeartor" {
+		walletType = "base_wallet"
+	} else if identityType == "parter" {
+		walletType = "partner_wallet"
+	}
+
+	return walletType
+}
+
 // randomID generates a random hex string in the UUID format:
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
 func randomID() (string, error) {

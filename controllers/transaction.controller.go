@@ -75,7 +75,7 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 	}
 
 	if input.From == input.To {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_SAME_FROM_AND_TO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
 		return
 	}
 

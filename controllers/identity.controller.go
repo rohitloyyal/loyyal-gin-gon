@@ -214,11 +214,11 @@ func (controller *IdentityController) identityFilter(ctx *gin.Context) {
 
 	queryString := "AND isDeleted=false AND identityType!='admin'"
 	if identity.Identifier != "" {
-		queryString = " AND identifier=$identifier"
+		queryString += " AND identifier=$identifier"
 	}
 
 	if identity.Username != "" {
-		queryString = " AND username=$username"
+		queryString += " AND username=$username"
 	}
 
 	identities, err := controller.IdentityService.Filter(ctx.Request.Context(), queryString, map[string]interface{}{
