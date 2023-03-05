@@ -83,14 +83,16 @@ func (controller *IdentityController) identityCreate(ctx *gin.Context) {
 		return
 	}
 
-	// creating default wallet
-	var wallet models.Wallet
-	wallet.Name = defaultWallet.WalletName
+	if defaultWallet.IsdefaultWalletRequired {
+		// creating default wallet
+		var wallet models.Wallet
+		wallet.Name = defaultWallet.WalletName
 
-	err = controller.WalletService.Create(ctx.Request.Context(), &wallet, identity.Identifier, defaultWallet.PreLoadValue)
-	if err != nil {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
-		return
+		err = controller.WalletService.Create(ctx.Request.Context(), &wallet, identity.Identifier, defaultWallet.PreLoadValue)
+		if err != nil {
+			common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
+			return
+		}
 	}
 
 	common.PrepareCustomResponse(ctx, "identity created successfully", struct {
@@ -203,7 +205,26 @@ func (controller *IdentityController) identityFilter(ctx *gin.Context) {
 	tracer := otel.Tracer("identityFilter")
 	_, span := tracer.Start(ctx.Request.Context(), fName)
 	defer span.End()
-	identities, err := controller.IdentityService.Filter(ctx.Request.Context(), "AND isDeleted=false AND identityType!='admin'", map[string]interface{}{}, "createdAt", -1)
+
+	var identity models.Identity
+	if err := ctx.ShouldBindJSON(&identity); err != nil {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request payload provided", fmt.Sprintf("got :%s ", err))
+		return
+	}
+
+	queryString := "AND isDeleted=false AND identityType!='admin'"
+	if identity.Identifier != "" {
+		queryString = " AND identifier=$identifier"
+	}
+
+	if identity.Username != "" {
+		queryString = " AND username=$username"
+	}
+
+	identities, err := controller.IdentityService.Filter(ctx.Request.Context(), queryString, map[string]interface{}{
+		"identifier": identity.Identifier,
+		"username":   identity.Username,
+	}, "createdAt", -1)
 
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))

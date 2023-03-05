@@ -307,13 +307,6 @@ func (controller *TransactionController) TransactionFilter(ctx *gin.Context) {
 	_, span := tracer.Start(ctx.Request.Context(), fName)
 	defer span.End()
 
-	results, err := controller.TransactionService.Filter(ctx.Request.Context(), "", map[string]interface{}{}, "createdAt", -1)
-
-	if err != nil {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: no transaction found", fmt.Sprintf("%s", err))
-		return
-	}
-
 	type Transaction struct {
 		Identifier      string    `json:"identifier"`
 		Amount          int64     `json:"amount"`
@@ -323,6 +316,36 @@ func (controller *TransactionController) TransactionFilter(ctx *gin.Context) {
 		TransactionType string    `json:"transactionType"`
 		CreatedOn       time.Time `json:"createdOn"`
 		Creator         string    `json:"creator"`
+	}
+
+	var transaction Transaction
+	if err := ctx.BindJSON(&transaction); err != nil {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request payload provided", fmt.Sprintf("got :%s ", err))
+		return
+	}
+
+	queryString := ""
+	if transaction.From != "" {
+		queryString += " AND from_extid=$from"
+	}
+
+	if transaction.To != "" {
+		queryString += " AND to_extid=$to"
+	}
+
+	if transaction.Amount > 0 {
+		queryString += " AND amount=$amount"
+	}
+
+	results, err := controller.TransactionService.Filter(ctx.Request.Context(), queryString, map[string]interface{}{
+		"from":   transaction.From,
+		"to":     transaction.To,
+		"amount": transaction.Amount,
+	}, "createdAt", -1)
+
+	if err != nil {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: no transaction found", fmt.Sprintf("%s", err))
+		return
 	}
 
 	transactions := []Transaction{}

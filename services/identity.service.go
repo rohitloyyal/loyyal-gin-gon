@@ -83,7 +83,7 @@ func (service *IdentityService) Login(ctx context.Context, user *models.Identity
 	// }
 
 	// generate token
-	token, err := token.GenerateToken(registeredUser.Username, registeredUser.IdentityType, registeredUser.PersonalDetails.FirstName)
+	token, err := token.GenerateToken(registeredUser.Username, registeredUser.IdentityType, registeredUser.PersonalDetails.FirstName, registeredUser.Identifier)
 	if err != nil {
 		return "", err
 	}

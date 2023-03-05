@@ -200,14 +200,33 @@ func (controller *WalletController) walletFilter(ctx *gin.Context) {
 	_, span := tracer.Start(ctx.Request.Context(), fName)
 	defer span.End()
 
-	transactions, err := controller.WalletService.Filter(ctx.Request.Context(), "AND isDeleted=false", map[string]interface{}{}, "createdAt", -1)
+	queryString := "AND isDeleted=false"
+
+	var wallet models.Wallet
+	if err := ctx.BindJSON(&wallet); err != nil {
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, "error: invalid request payload provided", fmt.Sprintf("got :%s ", err))
+		return
+	}
+
+	if wallet.Identifier != "" {
+		queryString += " AND identifier=$identifier"
+	}
+
+	if wallet.Name != "" {
+		queryString += " AND name=$name"
+	}
+
+	wallets, err := controller.WalletService.Filter(ctx.Request.Context(), queryString, map[string]interface{}{
+		"identifier": wallet.Identifier,
+		"name":       wallet.Name,
+	}, "createdAt", -1)
 
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return
 	}
 
-	common.PrepareCustomResponse(ctx, "transactions fetched", transactions)
+	common.PrepareCustomResponse(ctx, "wallets fetched", wallets)
 }
 
 func (controller *WalletController) publishTxToNats(ctx context.Context, transaction *models.Transaction) {

@@ -12,7 +12,7 @@ import (
 	"go.opencensus.io/trace"
 )
 
-func GenerateToken(email string, role string, name string) (string, error) {
+func GenerateToken(email string, role string, name string, userIdentifier string) (string, error) {
 	token_expiry, err := strconv.Atoi(os.Getenv("JWT_TOKEN_VALIDITY"))
 
 	if err != nil {
@@ -24,6 +24,7 @@ func GenerateToken(email string, role string, name string) (string, error) {
 	claims["sub"] = email
 	claims["name"] = name
 	claims["aud"] = role
+	claims["userIdentifier"] = userIdentifier
 
 	location, _ := time.LoadLocation("UTC")
 	claims["exp"] = time.Now().In(location).Add(time.Hour * time.Duration(token_expiry)).Unix()
@@ -36,7 +37,7 @@ func GenerateToken(email string, role string, name string) (string, error) {
 func TokenValid(c *gin.Context) error {
 	_, sp := trace.StartSpan(c, "api/v4/userSession")
 	defer sp.End()
-	
+
 	tokenString := ExtractToken(c)
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
