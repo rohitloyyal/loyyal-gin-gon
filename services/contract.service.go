@@ -22,6 +22,12 @@ const (
 	contract_prefix = "contract"
 )
 
+const (
+	CONTRACT_STATUS_ACTIVE  = "active"
+	CONTRACT_STATUS_PENDING = "pending"
+	CONTRACT_STATUS_EXPIRED = "expired"
+)
+
 func NewContract(cluster *gocb.Cluster, bucket *gocb.Bucket) ContractService {
 	return ContractService{cluster: cluster, bucket: bucket}
 }
@@ -121,7 +127,7 @@ func (service *ContractService) MarkContractAsExpired(ctx context.Context, contr
 		return err
 	}
 
-	wallet.Status = EXPIRED
+	wallet.Status = WALLET_STATUS_EXPIRED
 	location, _ := time.LoadLocation("UTC")
 	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
 	wallet.LastUpdatedAt = now

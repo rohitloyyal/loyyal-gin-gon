@@ -86,7 +86,7 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 
 	// check if From is valid
 	walletFrom, err := controller.WalletService.Get(ctx.Request.Context(), input.From)
-	if common.IsStructEmpty(walletFrom) {
+	if common.IsStructEmpty(walletFrom) || walletFrom.UUID == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
 	}
@@ -98,7 +98,7 @@ func (controller *TransactionController) issue(ctx *gin.Context) {
 
 	// check if To is valid
 	walletTo, err := controller.WalletService.Get(ctx.Request.Context(), input.To)
-	if common.IsStructEmpty(walletTo) {
+	if common.IsStructEmpty(walletTo) || walletTo.UUID == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
 	}
@@ -152,13 +152,13 @@ func (controller *TransactionController) redeem(ctx *gin.Context) {
 	}
 
 	if input.From == input.To {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_SAME_FROM_AND_TO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
 		return
 	}
 
 	// check if From is valid
 	walletFrom, err := controller.WalletService.Get(ctx.Request.Context(), input.From)
-	if common.IsStructEmpty(walletFrom) {
+	if common.IsStructEmpty(walletFrom) || walletFrom.UUID == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
 	}
@@ -170,7 +170,7 @@ func (controller *TransactionController) redeem(ctx *gin.Context) {
 
 	// check if To is valid
 	walletTo, err := controller.WalletService.Get(ctx.Request.Context(), input.To)
-	if common.IsStructEmpty(walletTo) {
+	if common.IsStructEmpty(walletTo) || walletTo.UUID == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
 	}
@@ -218,13 +218,13 @@ func (controller *TransactionController) transfer(ctx *gin.Context) {
 	}
 
 	if input.From == input.To {
-		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_AMOUNT_NEGATIVE_OR_ZERO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
+		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_SAME_FROM_AND_TO.Error(), fmt.Sprintf("got: from %s & to %s", input.From, input.To))
 		return
 	}
 
 	// check if From is valid
 	walletFrom, err := controller.WalletService.Get(ctx.Request.Context(), input.From)
-	if common.IsStructEmpty(walletFrom) {
+	if common.IsStructEmpty(walletFrom) || walletFrom.UUID == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletFrom))
 		return
 	}
@@ -236,7 +236,7 @@ func (controller *TransactionController) transfer(ctx *gin.Context) {
 
 	// check if To is valid
 	walletTo, err := controller.WalletService.Get(ctx.Request.Context(), input.To)
-	if common.IsStructEmpty(walletTo) {
+	if common.IsStructEmpty(walletTo) || walletTo.UUID == "" {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, ERR_INVALID_WALLET.Error(), fmt.Sprintf("got :%v ", walletTo))
 		return
 	}
@@ -273,6 +273,7 @@ func (controller *TransactionController) withdraw(ctx *gin.Context) {
 
 }
 
+// TODO: to remove all un required filed before returning outdide system
 func (controller *TransactionController) TransactionGet(ctx *gin.Context) {
 	fName := "transactioncontrller/get"
 	tracer := otel.Tracer("TransactionGet")
@@ -308,14 +309,15 @@ func (controller *TransactionController) TransactionFilter(ctx *gin.Context) {
 	defer span.End()
 
 	type Transaction struct {
-		Identifier      string    `json:"identifier"`
-		Amount          int64     `json:"amount"`
-		From            string    `json:"from"`
-		To              string    `json:"to"`
-		Currency        string    `json:"currency"`
-		TransactionType string    `json:"transactionType"`
-		CreatedOn       time.Time `json:"createdOn"`
-		Creator         string    `json:"creator"`
+		Identifier             string    `json:"identifier"`
+		Amount                 int64     `json:"amount"`
+		From                   string    `json:"from"`
+		To                     string    `json:"to"`
+		Currency               string    `json:"currency"`
+		TransactionType        string    `json:"transactionType"`
+		CreatedOn              time.Time `json:"createdOn"`
+		Creator                string    `json:"creator"`
+		IsCommitedOnBlockchain bool      `json:"isCommited,omitempty"`
 	}
 
 	var transaction Transaction
@@ -360,6 +362,9 @@ func (controller *TransactionController) TransactionFilter(ctx *gin.Context) {
 		tx.Creator = row.Creator
 		tx.CreatedOn = row.CreatedOn
 
+		if row.UUID != "" {
+			tx.IsCommitedOnBlockchain = true
+		}
 		transactions = append(transactions, tx)
 
 	}

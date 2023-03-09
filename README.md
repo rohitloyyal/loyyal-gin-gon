@@ -46,6 +46,14 @@ make build (build the docker images for the golo services)
 make push (push the docker images to the erc/dockerhub repository)
 ```
 
+
+```
+aws ecr get-login-password --region me-south-1 | docker login --username AWS --password-stdin 827830277284.dkr.ecr.me-south-1.amazonaws.com
+
+docker build -t 827830277284.dkr.ecr.me-south-1.amazonaws.com/api:4.0.6 -f cmd/api/Dockerfile .
+docker push 827830277284.dkr.ecr.me-south-1.amazonaws.com/api:4.0.6
+```
+
 ### To deploy the project
 
 ```

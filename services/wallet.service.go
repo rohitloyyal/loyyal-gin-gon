@@ -25,10 +25,10 @@ const (
 )
 
 const (
-	ACTIVE     = "active"
-	SUBSPENDED = "suspended"
-	DISABLED   = "disabled"
-	EXPIRED    = "expired"
+	WALLET_STATUS_ACTIVE     = "active"
+	WALLET_STATUS_SUBSPENDED = "suspended"
+	WALLET_STATUS_DISABLED   = "disabled"
+	WALLET_STATUS_EXPIRED    = "expired"
 )
 
 func NewWallet(cluster *gocb.Cluster, bucket *gocb.Bucket) WalletService {
@@ -44,7 +44,7 @@ func (service *WalletService) Create(ctx context.Context, wallet *models.Wallet,
 
 	wallet.WalletType = "regular"
 	wallet.Creator = "admin"
-	wallet.Status = ACTIVE
+	wallet.Status = WALLET_STATUS_ACTIVE
 
 	location, _ := time.LoadLocation("UTC")
 	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
@@ -207,6 +207,12 @@ func parseWalletRows(rows *gocb.QueryResult) []*models.Wallet {
 		if err != nil {
 			panic(err)
 		}
+
+		if obj.UUID != "" {
+			obj.IsCommitedOnBlockchain = true
+		}
+		obj.UUID = ""
+		obj.Ref = ""
 		wallets = append(wallets, &obj)
 	}
 	defer rows.Close()

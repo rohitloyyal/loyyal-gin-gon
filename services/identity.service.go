@@ -26,6 +26,11 @@ const (
 	identity_prefix = "user"
 )
 
+const (
+	IDENTITY_STATUS_ACTIVE   = "active"
+	IDENTITY_STATUS_DISABLED = "disabled"
+)
+
 func NewIdentity(cluster *gocb.Cluster, bucket *gocb.Bucket) IdentityService {
 	return IdentityService{cluster: cluster, bucket: bucket}
 }
@@ -115,7 +120,7 @@ func (service *IdentityService) Create(ctx context.Context, identity *models.Ide
 		identity.Creator = "admin"
 	}
 
-	identity.Status = ACTIVE
+	identity.Status = WALLET_STATUS_ACTIVE
 	location, _ := time.LoadLocation("UTC")
 	now, _ := time.Parse(time.RFC1123, time.Now().In(location).Format(time.RFC1123))
 
@@ -151,6 +156,7 @@ func (service *IdentityService) Get(ctx context.Context, identityId string) (any
 		return nil, err
 	}
 
+	identity.Password = ""
 	return identity, err
 }
 
@@ -246,14 +252,15 @@ func (service *IdentityService) Filter(ctx context.Context, queryString string, 
 }
 
 func parseIdentityRows(rows *gocb.QueryResult) []*models.Identity {
-	var identitys []*models.Identity
+	var identities []*models.Identity
 	for rows.Next() {
 		var obj models.Identity
 		err := rows.Row(&obj)
 		if err != nil {
 			panic(err)
 		}
-		identitys = append(identitys, &obj)
+		obj.Password = ""
+		identities = append(identities, &obj)
 	}
 	defer rows.Close()
 	err := rows.Err()
@@ -261,5 +268,5 @@ func parseIdentityRows(rows *gocb.QueryResult) []*models.Identity {
 		panic(err)
 	}
 
-	return identitys
+	return identities
 }

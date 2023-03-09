@@ -11,6 +11,7 @@ import (
 
 	"github.com/loyyal/loyyal-be-contract/middleware"
 	"github.com/loyyal/loyyal-be-contract/models"
+	"github.com/loyyal/loyyal-be-contract/nats"
 	"github.com/loyyal/loyyal-be-contract/services"
 	"github.com/loyyal/loyyal-be-contract/utils/common"
 )
@@ -19,14 +20,16 @@ type IdentityController struct {
 	logger          *log.Logger
 	IdentityService services.IdentityService
 	WalletService   services.WalletService
+	Nats            *nats.Client
 }
 
 // constructor calling
-func NewIdentityController(logger *log.Logger, service services.IdentityService, walletservice services.WalletService) IdentityController {
+func NewIdentityController(logger *log.Logger, service services.IdentityService, walletservice services.WalletService, nats *nats.Client) IdentityController {
 	return IdentityController{
 		IdentityService: service,
 		WalletService:   walletservice,
 		logger:          logger,
+		Nats:            nats,
 	}
 }
 
@@ -92,6 +95,12 @@ func (controller *IdentityController) identityCreate(ctx *gin.Context) {
 		if err != nil {
 			common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 			return
+		}
+
+		// publishing to nats
+		if err := controller.Nats.Publish(ctx.Request.Context(), &models.CreateRequest{RefID: wallet.Ref, Amount: wallet.Balance, Channel: wallet.Channel}); err != nil {
+			fmt.Print("failed to write wallet to NATS (failing over to retry service): %w", err)
+			// TODO: execute the retry flow from here
 		}
 	}
 

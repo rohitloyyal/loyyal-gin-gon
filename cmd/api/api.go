@@ -116,7 +116,7 @@ func init() {
 	contractService = services.NewContract(cluster, bucket)
 
 	authController = controllers.NewAuthController(identityService)
-	identityController = controllers.NewIdentityController(logger, identityService, walletService)
+	identityController = controllers.NewIdentityController(logger, identityService, walletService, queueService)
 	walletController = controllers.NewWallet(walletService, transactionService, queueService)
 	transactionController = controllers.NewTransactionController(logger, transactionService, contractService, walletService, queueService)
 	contractController = controllers.NewContractController(contractService)

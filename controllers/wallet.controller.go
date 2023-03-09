@@ -157,6 +157,11 @@ func (controller *WalletController) walletGet(ctx *gin.Context) {
 	}
 
 	wallet, err := controller.WalletService.Get(ctx.Request.Context(), walletId)
+	if wallet.UUID != "" {
+		wallet.IsCommitedOnBlockchain = true
+	}
+	wallet.UUID = ""
+	wallet.Ref = ""
 	if err != nil {
 		common.PrepareCustomError(ctx, http.StatusBadRequest, fName, err.Error(), fmt.Sprintf("got :%s ", err))
 		return

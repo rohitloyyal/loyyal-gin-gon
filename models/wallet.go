@@ -52,4 +52,7 @@ type Wallet struct {
 	LastUpdatedAt time.Time `json:"lastUpdatedAt"`
 	LastUpdatedBy string    `json:"lastUpdatedBy"`
 	IsDeleted     bool      `json:"isDeleted"`
+
+	// adding this flag instead of returing the actual ref/uuid outside the system
+	IsCommitedOnBlockchain bool `json:"isCommited,omitempty"`
 }
